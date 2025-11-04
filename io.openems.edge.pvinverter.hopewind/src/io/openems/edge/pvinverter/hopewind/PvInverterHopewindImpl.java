@@ -1,5 +1,6 @@
 package io.openems.edge.pvinverter.hopewind;
 
+import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_1;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_1;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_2;
 import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE;
@@ -19,6 +20,8 @@ import org.osgi.service.event.Event;
 import org.osgi.service.event.EventHandler;
 import org.osgi.service.event.propertytypes.EventTopics;
 import org.osgi.service.metatype.annotations.Designate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.openems.common.channel.AccessMode;
 import io.openems.common.exceptions.OpenemsException;
@@ -39,6 +42,7 @@ import io.openems.edge.meter.api.ElectricityMeter;
 import io.openems.edge.pvinverter.api.ManagedSymmetricPvInverter;
 import io.openems.edge.timedata.api.Timedata;
 import io.openems.edge.timedata.api.TimedataProvider;
+import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 
 @Designate(ocd = Config.class, factory = true)
 @Component(
@@ -54,6 +58,13 @@ import io.openems.edge.timedata.api.TimedataProvider;
 public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		implements PvInverterHopewind, ManagedSymmetricPvInverter, ElectricityMeter,
 		ModbusComponent, OpenemsComponent, EventHandler, ModbusSlave, TimedataProvider {
+
+	private static final int ACTIVE_POWER_MAX = 60000;
+
+	private final Logger logger = LoggerFactory.getLogger(PvInverterHopewindImpl.class);
+
+	private final CalculateEnergyFromPower calculateProductionEnergy = new CalculateEnergyFromPower(this,
+			ElectricityMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY);
 
 	@Reference
 	private ConfigurationAdmin cm;
@@ -89,6 +100,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		if (!config.enabled()) {
 			return;
 		}
+		this._setMaxApparentPower(ACTIVE_POWER_MAX);
 	}
 
 	@Override
@@ -102,8 +114,13 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		if (!this.isEnabled()) {
 			return;
 		}
-		if (event.getTopic() == EdgeEventConstants.TOPIC_CYCLE_EXECUTE_WRITE) {
+		switch (event.getTopic()) {
+		case EdgeEventConstants.TOPIC_CYCLE_EXECUTE_WRITE:
 			this.channel(PvInverterHopewind.ChannelId.WATCH_DOG).setNextValue(1);
+			break;
+		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
+			this.calculateProductionEnergy.update(this.getActivePower().get());
+			break;
 		}
 	}
 
@@ -111,10 +128,10 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 	protected ModbusProtocol defineModbusProtocol() {
 		return new ModbusProtocol(this,
 				new FC3ReadRegistersTask(12, Priority.HIGH,
-						m(PvInverterHopewind.ChannelId.POWER_LIMIT,
-								new UnsignedWordElement(11), SCALE_FACTOR_MINUS_2),
-						m(PvInverterHopewind.ChannelId.POWER_LIMIT_PERC,
-								new UnsignedWordElement(12), SCALE_FACTOR_MINUS_2)),
+						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
+								new UnsignedWordElement(12), SCALE_FACTOR_1),
+						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERC,
+								new UnsignedWordElement(13), SCALE_FACTOR_MINUS_2)),
 				new FC3ReadRegistersTask(535, Priority.HIGH,
 						m(ElectricityMeter.ChannelId.CURRENT_L1,
 								new UnsignedWordElement(535), SCALE_FACTOR_MINUS_1),
@@ -129,11 +146,14 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 						m(ElectricityMeter.ChannelId.REACTIVE_POWER,
 								new UnsignedWordElement(540), SCALE_FACTOR_MINUS_2)),
 				new FC6WriteRegisterTask(12,
-						m(PvInverterHopewind.ChannelId.POWER_LIMIT,
-								new UnsignedWordElement(12), SCALE_FACTOR_MINUS_2)),
+						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
+								new UnsignedWordElement(12), SCALE_FACTOR_1)),
+				new FC6WriteRegisterTask(13,
+						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERC,
+								new UnsignedWordElement(13), SCALE_FACTOR_MINUS_2)),
 				new FC6WriteRegisterTask(32014,
 						m(PvInverterHopewind.ChannelId.WATCH_DOG,
-								new UnsignedWordElement(32014), SCALE_FACTOR_MINUS_2)));
+								new UnsignedWordElement(32014))));
 	}
 
 	@Override
@@ -142,6 +162,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 				OpenemsComponent.getModbusSlaveNatureTable(accessMode),
 				ElectricityMeter.getModbusSlaveNatureTable(accessMode),
 				ManagedSymmetricPvInverter.getModbusSlaveNatureTable(accessMode));
+//				PvInverterHopewind.getModbusSlaveNatureTable(accessMode));
 	}
 
 	@Override

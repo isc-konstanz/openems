@@ -3,6 +3,7 @@ package io.openems.edge.pvinverter.hopewind;
 import org.osgi.service.event.EventHandler;
 
 import io.openems.common.channel.AccessMode;
+import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
 import io.openems.common.types.OpenemsType;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
@@ -18,16 +19,14 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter, Electric
 	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
 		WATCH_DOG(Doc.of(OpenemsType.INTEGER)),
 
-//		POWER_LIMIT_TYPE(Doc.of(PowerLimitType.values())
+//		ACTIVE_POWER_LIMIT_TYPE(Doc.of(PowerLimitType.values())
 //				.accessMode(AccessMode.READ_WRITE)),
-		POWER_LIMIT_PERC(Doc.of(OpenemsType.INTEGER)
+		ACTIVE_POWER_LIMIT_PERC(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.PERCENT)
 				.accessMode(AccessMode.READ_WRITE)
-				.unit(Unit.PERCENT)),
-		POWER_LIMIT(Doc.of(OpenemsType.INTEGER)
-				.accessMode(AccessMode.READ_WRITE)
-				.unit(Unit.KILOWATT));
+				.persistencePriority(PersistencePriority.MEDIUM));
 
-//		POWER_LIMIT_FAILED(Doc.of(Level.FAULT)
+//		ACTIVE_POWER_LIMIT_FAILED(Doc.of(Level.FAULT)
 //				.text("Power-Limit failed"));
 
 		private final Doc doc;

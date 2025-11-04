@@ -232,5 +232,8 @@ io.openems.edge.application/c:/
 /io.openems.*/bin_test/
 /io.openems.*/generated/
 
+/cnf/edge/*
+!/cnf/edge/*.properties
+
 ### Debian ###
 !tools/debian/**

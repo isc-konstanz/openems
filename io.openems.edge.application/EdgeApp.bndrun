@@ -1,5 +1,5 @@
-launcher.etc = ${workspace}/edge/conf
-launcher.var = ${workspace}/edge/conf/system.d
+launcher.etc = ${workspace}/cnf/edge
+launcher.var = ${workspace}/cnf/edge/system.d
 launcher.tmp = ${workspace}/build/tmp
 
 -runfw: org.apache.felix.framework;version='[7.0.5,7.0.5]'

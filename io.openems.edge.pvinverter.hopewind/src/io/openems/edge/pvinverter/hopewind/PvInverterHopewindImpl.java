@@ -10,6 +10,8 @@ import static org.osgi.service.component.annotations.ReferencePolicy.DYNAMIC;
 import static org.osgi.service.component.annotations.ReferencePolicy.STATIC;
 import static org.osgi.service.component.annotations.ReferencePolicyOption.GREEDY;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.osgi.service.cm.ConfigurationAdmin;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
@@ -24,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.openems.common.channel.AccessMode;
+import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
 import io.openems.common.types.MeterType;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
@@ -37,9 +40,15 @@ import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.modbusslave.ModbusSlaveTable;
+import io.openems.edge.common.startstop.StartStop;
+import io.openems.edge.common.startstop.StartStopConfig;
+import io.openems.edge.common.startstop.StartStoppable;
 import io.openems.edge.common.taskmanager.Priority;
 import io.openems.edge.meter.api.ElectricityMeter;
 import io.openems.edge.pvinverter.api.ManagedSymmetricPvInverter;
+import io.openems.edge.pvinverter.hopewind.statemachine.Context;
+import io.openems.edge.pvinverter.hopewind.statemachine.StateMachine;
+import io.openems.edge.pvinverter.hopewind.statemachine.StateMachine.State;
 import io.openems.edge.timedata.api.Timedata;
 import io.openems.edge.timedata.api.TimedataProvider;
 import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
@@ -53,11 +62,11 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 				"type=PRODUCTION"
 		})
 @EventTopics({
-		EdgeEventConstants.TOPIC_CYCLE_EXECUTE_WRITE,
+		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE,
 })
 public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		implements PvInverterHopewind, ManagedSymmetricPvInverter, ElectricityMeter,
-		ModbusComponent, OpenemsComponent, EventHandler, ModbusSlave, TimedataProvider {
+		ModbusSlave, ModbusComponent, OpenemsComponent, EventHandler, StartStoppable, TimedataProvider {
 
 	private static final int ACTIVE_POWER_MAX = 60000;
 
@@ -65,6 +74,10 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 
 	private final CalculateEnergyFromPower calculateProductionEnergy = new CalculateEnergyFromPower(this,
 			ElectricityMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY);
+
+	private final StateMachine stateMachine = new StateMachine(State.UNDEFINED);
+
+	private final AtomicReference<StartStop> startStopTarget = new AtomicReference<>(StartStop.UNDEFINED);
 
 	@Reference
 	private ConfigurationAdmin cm;
@@ -84,6 +97,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		super(
 				OpenemsComponent.ChannelId.values(),
 				ModbusComponent.ChannelId.values(),
+				StartStoppable.ChannelId.values(),
 				ElectricityMeter.ChannelId.values(),
 				ManagedSymmetricPvInverter.ChannelId.values(),
 				PvInverterHopewind.ChannelId.values()
@@ -115,12 +129,42 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 			return;
 		}
 		switch (event.getTopic()) {
-		case EdgeEventConstants.TOPIC_CYCLE_EXECUTE_WRITE:
-			this.channel(PvInverterHopewind.ChannelId.WATCH_DOG).setNextValue(1);
-			break;
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
+			this.handleStateMachine();
 			this.calculateProductionEnergy.update(this.getActivePower().get());
 			break;
+		}
+	}
+
+	private void handleStateMachine() {
+		// Store the current State
+		this._setStateMachine(this.stateMachine.getCurrentState());
+
+		// Initialize 'Start-Stop' Channel
+		this._setStartStop(StartStop.UNDEFINED);
+
+		if (this.startStopTarget.get() != StartStop.STOP && 
+				this.config.startStop() != StartStopConfig.STOP) {
+			try {
+				this.setHeartBeat();
+				
+			} catch (IllegalArgumentException | OpenemsNamedException e) {
+				this.logError(this.logger, "Setting HeartBeat failed: " + e.getMessage());
+				e.printStackTrace();
+			}
+		}
+
+		// Prepare the Context
+		var context = new Context(this, this.config);
+
+		// Call the StateMachine
+		try {
+			this.stateMachine.run(context);
+			this._setRunFailed(false);
+
+		} catch (OpenemsNamedException e) {
+			this._setRunFailed(true);
+			this.logError(this.logger, "StateMachine failed: " + e.getMessage());
 		}
 	}
 
@@ -152,7 +196,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERC,
 								new UnsignedWordElement(40014), SCALE_FACTOR_MINUS_2)),
 				new FC6WriteRegisterTask(32015,
-						m(PvInverterHopewind.ChannelId.WATCH_DOG,
+						m(PvInverterHopewind.ChannelId.HEART_BEAT,
 								new UnsignedWordElement(32015))));
 	}
 
@@ -163,6 +207,23 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 				ElectricityMeter.getModbusSlaveNatureTable(accessMode),
 				ManagedSymmetricPvInverter.getModbusSlaveNatureTable(accessMode));
 //				PvInverterHopewind.getModbusSlaveNatureTable(accessMode));
+	}
+
+	@Override
+	public void setStartStop(StartStop value) {
+		if (this.startStopTarget.getAndSet(value) != value) {
+			// Set only if value changed
+			this.stateMachine.forceNextState(State.UNDEFINED);
+		}
+	}
+
+	@Override
+	public StartStop getStartStopTarget() {
+		return switch (this.config.startStop()) {
+		case AUTO -> this.startStopTarget.get(); // read StartStop-Channel
+		case START -> StartStop.START; // force START
+		case STOP -> StartStop.STOP; // force STOP
+		};
 	}
 
 	@Override
@@ -177,7 +238,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 
 	@Override
 	public String debugLog() {
-		return "L:" + this.getActivePower().asString();
+		return new StringBuilder()
+				.append(stateMachine.debugLog())
+				.toString();
 	}
 
 }

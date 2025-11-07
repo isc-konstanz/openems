@@ -1,3 +1,7 @@
+launcher.etc = ${workspace}/cnf
+launcher.var = ${workspace}/cnf/backend.d
+launcher.tmp = ${workspace}/cache/backend
+
 -runfw: org.apache.felix.framework;version='[7.0.5,7.0.5]'
 -runee: JavaSE-21
 -runprovidedcapabilities: ${native_capability}
@@ -9,11 +13,13 @@
 	-Dfile.encoding=UTF-8
 
 -runproperties: \
-	org.osgi.service.http.port=8079,\
-	felix.cm.dir=c:/openems-backend/config,\
-	openems.data.dir=c:/openems-backend/data,\
+    felix.cm.dir=${launcher.var},\
+	felix.system.properties=${launcher.etc}/backend.properties,\
+	felix.config.properties=${launcher.etc}/config.properties,\
+	org.osgi.framework.storage=${launcher.tmp},\
 	org.apache.felix.eventadmin.Timeout=0,\
-	org.ops4j.pax.logging.DefaultServiceLog.level=INFO
+    org.ops4j.pax.logging.DefaultServiceLog.level=INFO
+
 
 -runsystempackages: \
 	sun.misc

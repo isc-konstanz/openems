@@ -1,6 +1,6 @@
-launcher.etc = ${workspace}/cnf/edge
-launcher.var = ${workspace}/cnf/edge/system.d
-launcher.tmp = ${workspace}/build/tmp
+launcher.etc = ${workspace}/cnf
+launcher.var = ${workspace}/cnf/edge.d
+launcher.tmp = ${workspace}/cache/edge
 
 -runfw: org.apache.felix.framework;version='[7.0.5,7.0.5]'
 -runee: JavaSE-21
@@ -10,7 +10,7 @@ launcher.tmp = ${workspace}/build/tmp
 
 -runproperties:\
     felix.cm.dir=${launcher.var},\
-	felix.system.properties=${launcher.etc}/system.properties,\
+	felix.system.properties=${launcher.etc}/edge.properties,\
 	felix.config.properties=${launcher.etc}/config.properties,\
 	org.osgi.framework.storage=${launcher.tmp},\
 	org.apache.felix.eventadmin.Timeout=0,\
@@ -192,6 +192,7 @@ launcher.tmp = ${workspace}/build/tmp
 	bnd.identity;id='io.openems.edge.pvinverter.kaco.blueplanet',\
 	bnd.identity;id='io.openems.edge.pvinverter.kostal',\
 	bnd.identity;id='io.openems.edge.pvinverter.solarlog',\
+	bnd.identity;id='io.openems.edge.rct.cess',\
 	bnd.identity;id='io.openems.edge.scheduler.allalphabetically',\
 	bnd.identity;id='io.openems.edge.scheduler.daily',\
 	bnd.identity;id='io.openems.edge.scheduler.fixedorder',\
@@ -390,6 +391,7 @@ launcher.tmp = ${workspace}/build/tmp
 	io.openems.edge.pvinverter.kaco.blueplanet;version=snapshot,\
 	io.openems.edge.pvinverter.kostal;version=snapshot,\
 	io.openems.edge.pvinverter.solarlog;version=snapshot,\
+	io.openems.edge.rct.cess;version=snapshot,\
 	io.openems.edge.scheduler.allalphabetically;version=snapshot,\
 	io.openems.edge.scheduler.api;version=snapshot,\
 	io.openems.edge.scheduler.daily;version=snapshot,\

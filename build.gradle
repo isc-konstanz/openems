@@ -133,6 +133,13 @@ subprojects {
 	}
 }
 
+configure(rootProject) {
+    jar {
+        // FIXME: Find better solution to avoid the root project beeing built
+        destinationDirectory = new File("$rootDir/build/tmp/jar")
+    }
+}
+
 tasks.named('wrapper') {
 	jarFile = rootProject.file('.gradle-wrapper/gradle-wrapper.jar')
 }

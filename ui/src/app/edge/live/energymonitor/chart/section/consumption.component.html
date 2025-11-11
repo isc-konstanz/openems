@@ -1,6 +1,6 @@
 <svg:path [attr.d]="outlinePath" fill="var(--ion-color-light)" stroke="var(--ion-color-medium-soft)"></svg:path>
   @if (isEnabled) {
-    <svg:path [attr.d]="valuePath" fill="var(--ion-color-warning)" stroke="var(--ion-color-warning)">
+    <svg:path [attr.d]="valuePath" fill="var(--ion-color-consumption)" stroke="var(--ion-color-consumption)">
       </svg:path>
     }
     @if (isEnabled && energyFlow) {
@@ -9,7 +9,7 @@
           <svg:linearGradient [attr.id]="sectionId" [attr.x1]="energyFlow.gradient.x1" [attr.y1]="energyFlow.gradient.y1"
             [attr.x2]="energyFlow.gradient.x2" [attr.y2]="energyFlow.gradient.y2">
             <svg:stop offset="0%" stop-color="var(--ion-item-background)" />
-            <svg:stop offset="100%" stop-color="var(--ion-color-warning)" />
+            <svg:stop offset="100%" stop-color="var(--ion-color-consumption)" />
             </svg:linearGradient>
             </svg:defs>
             <svg:polygon [attr.points]="energyFlow.points" attr.fill="{{ fillRef }}" />
@@ -30,7 +30,7 @@
                 }
                 <ng-template #no_text>-</ng-template>
                 </svg:text>
-                <svg:use style="color: var(--ion-color-warning)" [attr.x]="square.image.x" [attr.y]="square.image.y"
+                <svg:use style="color: var(--ion-color-consumption)" [attr.x]="square.image.x" [attr.y]="square.image.y"
                   [attr.width]="square.image.length" [attr.height]="square.image.length"
                   [attr.href]="square.image.image + '#root'">
                   </svg:use>

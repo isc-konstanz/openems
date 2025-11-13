@@ -2,16 +2,16 @@ package io.openems.edge.pvinverter.hopewind;
 
 import io.openems.common.types.OptionsEnum;
 
-public enum CommunicationState implements OptionsEnum {
-	UNDEFINED(-1, "Undefined"), //
-	STANDBY(0, "Standby"), //
-	RUNNING(1, "Running"), //
-	ERROR(2, "Error");
+public enum ActivePowerLimitState implements OptionsEnum {
+	UNDEFINED(-1, "Undefined"),
+	DISABLED(0, "Disabled"),
+	ACTUAL(1, "Actual Power"),
+	PROPORTIONAL(2, "Proportional Power");
 
 	private final int value;
 	private final String name;
 
-	private CommunicationState(int value, String name) {
+	private ActivePowerLimitState(int value, String name) {
 		this.value = value;
 		this.name = name;
 	}

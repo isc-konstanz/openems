@@ -1,0 +1,32 @@
+= RCT Power
+
+== ESS
+
+Implemented Natures:
+- HybridEss
+- ManagedSymmetricEss
+- SymmetricEss
+
+== PV Inverter
+
+Implemented Natures:
+- ElectricityMeter
+- ManagedSymmetricPvInverter
+
+== Battery Inverter
+
+Implemented Natures:
+- ManagedSymmetricBatteryInverter
+- SymmetricBatteryInverter
+
+== Battery
+
+Implemented Natures:
+- Battery
+
+== Meter
+
+Implemented Natures:
+- ElectricityMeter
+
+https://github.com/OpenEMS/openems/tree/develop/io.openems.edge.rct.cess[Source Code icon:github[]]

@@ -179,13 +179,13 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 			this.channel(ElectricityMeter.ChannelId.CURRENT).setNextValue(I1 + I2 + I3);
 		}
 		if (V1 != null &&  I1 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L1).setNextValue((V1/1000 * I1/1000 * power_factor/100));
+			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L1).setNextValue((V1/1000 * I1/1000 * power_factor/100 / 1.732));
 		}
 		if (V2 != null &&  I2 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L2).setNextValue((V2/1000 * I2/1000 * power_factor/100));
+			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L2).setNextValue((V2/1000 * I2/1000 * power_factor/100 / 1.732));
 		}
 		if (V3 != null &&  I3 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L3).setNextValue((V3/1000 * I3/1000 * power_factor/100));
+			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L3).setNextValue((V3/1000 * I3/1000 * power_factor/100 / 1.732));
 		}
 
 		ActivePowerLimitState active_state = this.channel(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE).value().asEnum();
@@ -466,6 +466,13 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 //						m(PvInverterHopewind.ChannelId.REG_31115,
 //								new UnsignedWordElement(31115))),
 
+// Not available (Modbus Exception)
+//				new FC3ReadRegistersTask(31119, Priority.LOW,
+//						m(PvInverterHopewind.ChannelId.NIGHT_SLEEP,
+//								new UnsignedWordElement(31119)),
+//						m(PvInverterHopewind.ChannelId.RSD_ENABLED,
+//								new UnsignedWordElement(31120))),
+
 //				new FC3ReadRegistersTask(34000, Priority.LOW,
 //						m(PvInverterHopewind.ChannelId.REG_34000,
 //								new UnsignedWordElement(34000)),
@@ -479,6 +486,18 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 //				new FC3ReadRegistersTask(34005, Priority.LOW,
 //						m(PvInverterHopewind.ChannelId.REG_34005,
 //								new UnsignedWordElement(34005))),
+
+				new FC3ReadRegistersTask(34074, Priority.LOW,
+						m(PvInverterHopewind.ChannelId.DRM_ENABLED,
+								new UnsignedWordElement(34074)),
+						m(PvInverterHopewind.ChannelId.RIPPLE_CONTROL_ENABLED,
+								new UnsignedWordElement(34075))),
+
+				new FC3ReadRegistersTask(34294, Priority.LOW,
+						m(PvInverterHopewind.ChannelId.NS_PROTECTION_ENABLED,
+								new UnsignedWordElement(34294)),
+						m(PvInverterHopewind.ChannelId.NS_PROTECTION_SWITCH,
+								new UnsignedWordElement(34295))),
 			  
 				new FC3ReadRegistersTask(40000, Priority.HIGH,
 						m(PvInverterHopewind.ChannelId.REG_40000,
@@ -782,10 +801,29 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 								new UnsignedWordElement(1084)),
 						m(PvInverterHopewind.ChannelId.REG_1085,
 								new UnsignedWordElement(1085))),
+
+// Not available (Modbus Exception)
+//				new FC16WriteRegistersTask(31119,
+//						m(PvInverterHopewind.ChannelId.NIGHT_SLEEP,
+//								new UnsignedWordElement(31119))),
+//						m(PvInverterHopewind.ChannelId.RSD_ENABLED,
+//								new UnsignedWordElement(31120))),
 				
 				new FC6WriteRegisterTask(32014,
 						m(PvInverterHopewind.ChannelId.HEART_BEAT,
 								new UnsignedWordElement(32014))),
+
+				new FC16WriteRegistersTask(34074,
+						m(PvInverterHopewind.ChannelId.DRM_ENABLED,
+								new UnsignedWordElement(34074)),
+						m(PvInverterHopewind.ChannelId.RIPPLE_CONTROL_ENABLED,
+								new UnsignedWordElement(34075))),
+
+				new FC16WriteRegistersTask(34294,
+						m(PvInverterHopewind.ChannelId.NS_PROTECTION_ENABLED,
+								new UnsignedWordElement(34294)),
+						m(PvInverterHopewind.ChannelId.NS_PROTECTION_SWITCH,
+								new UnsignedWordElement(34295))),
 
 				new FC16WriteRegistersTask(40002,
 						m(PvInverterHopewind.ChannelId.REACTIVE_REGULATION_MODE,

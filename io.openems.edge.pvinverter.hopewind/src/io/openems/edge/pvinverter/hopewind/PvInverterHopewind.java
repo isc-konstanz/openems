@@ -308,6 +308,15 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter, Electric
 				.accessMode(AccessMode.READ_ONLY)
 				.text("Register 31115")),
 
+// Not available (Modbus Exception)
+//		// === 31119 - 31120 ===
+//		NIGHT_SLEEP(Doc.of(OpenemsType.INTEGER)
+//				.accessMode(AccessMode.READ_WRITE)
+//				.text("Night Sleep Status")),
+//		RSD_ENABLED(Doc.of(OpenemsType.INTEGER)
+//				.accessMode(AccessMode.READ_WRITE)
+//				.text("RSP Enable Status")),
+
 		// === 32014 ===
 		HEART_BEAT(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.WRITE_ONLY)
@@ -331,6 +340,22 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter, Electric
 		REG_34005(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
 				.text("Register 34005")),
+
+		// == 34074 - 34075 ==
+		DRM_ENABLED(Doc.of(OpenemsType.INTEGER)
+				.accessMode(AccessMode.READ_WRITE)
+				.text("DRM Enable Status")),
+		RIPPLE_CONTROL_ENABLED(Doc.of(OpenemsType.INTEGER)
+				.accessMode(AccessMode.READ_WRITE)
+				.text("Ripple Control Enable Status")),
+
+		// === 34294 - 39295 ===
+		NS_PROTECTION_ENABLED(Doc.of(OpenemsType.INTEGER)
+				.accessMode(AccessMode.READ_WRITE)
+				.text("Night Sleep Protection Status")),
+		NS_PROTECTION_SWITCH(Doc.of(OpenemsType.INTEGER)
+				.accessMode(AccessMode.READ_WRITE)
+				.text("Night Sleep Protection Switch")),
 
 		// === 40000 - 40005 ===
 		REG_40000(Doc.of(OpenemsType.INTEGER)
@@ -515,10 +540,10 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter, Electric
 				.text("CO2 Reduction in kg")),
 		DAILY_RUNTIME(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.HOUR)),
+				.unit(Unit.SECONDS)),
 		TOTAL_RUNTIME(Doc.of(OpenemsType.LONG)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.HOUR)),
+				.unit(Unit.SECONDS)),
 		REG_40557(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
 				.text("Register 40557")),

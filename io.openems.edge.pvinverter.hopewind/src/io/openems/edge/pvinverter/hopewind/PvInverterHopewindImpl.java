@@ -165,20 +165,19 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		Integer V1 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.VOLTAGE_L1).value());
 		Integer V2 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.VOLTAGE_L2).value());
 		Integer V3 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.VOLTAGE_L3).value());
-		if (V1 != null && V2 != null && V3 != null) {
-			this.channel(ElectricityMeter.ChannelId.VOLTAGE).setNextValue((V1 + V2 + V3) / 3);
-		}
 
 		Integer I1 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.CURRENT_L1).value());
 		Integer I2 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.CURRENT_L2).value());
 		Integer I3 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.CURRENT_L3).value());
+
+		Integer power_factor = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(PvInverterHopewind.ChannelId.POWER_FACTOR).value());
+
+		if (V1 != null && V2 != null && V3 != null) {
+			this.channel(ElectricityMeter.ChannelId.VOLTAGE).setNextValue((V1 + V2 + V3) / 3);
+		}
 		if (I1 != null && I2 != null && I3 != null) {
 			this.channel(ElectricityMeter.ChannelId.CURRENT).setNextValue(I1 + I2 + I3);
 		}
-
-		Integer power_factor = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(PvInverterHopewind.ChannelId.POWER_FACTOR).value());
-		System.out.println("Power Factor: " + power_factor);
-
 		if (V1 != null &&  I1 != null && power_factor != null) {
 			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L1).setNextValue((V1/1000 * I1/1000 * power_factor/100));
 		}
@@ -191,7 +190,6 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 
 		ActivePowerLimitState active_state = this.channel(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE).value().asEnum();
 		
-
 		if (active_state != null) {
 			switch (active_state) {
 			case ActivePowerLimitState.UNDEFINED:
@@ -216,7 +214,6 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 						this.channel(PvInverterHopewind.ChannelId.ACTIVE_PERCENT_REGULATION).value());
 				if (percent_power != null) {
 					int limited_power = Math.round(ACTIVE_POWER_MAX * percent_power / 100f);
-					System.out.println("Percent Power: " + limited_power);
 					this.channel(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT).setNextValue(limited_power);
 				} else {
 					this.channel(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT).setNextValue(null);
@@ -796,17 +793,17 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_FACTOR_REGULATION,
 								new SignedWordElement(40003), SCALE_FACTOR_MINUS_2),
 						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_REGULATION,
-								new UnsignedWordElement(40004)),
+								new UnsignedWordElement(40004), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.REACTIVE_PERCENT_REGULATION,
-								new UnsignedWordElement(40005))),
+								new UnsignedWordElement(40005), SCALE_FACTOR_MINUS_2)),
 
 				new FC16WriteRegistersTask(40011,
 						m(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE,
 								new UnsignedWordElement(40011)),
 						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_REGULATION,
-								new UnsignedWordElement(40012)),
+								new UnsignedWordElement(40012), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.ACTIVE_PERCENT_REGULATION,
-								new UnsignedWordElement(40013))),
+								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
 				
 				new FC16WriteRegistersTask(40200,
 						m(PvInverterHopewind.ChannelId.STARTUP,

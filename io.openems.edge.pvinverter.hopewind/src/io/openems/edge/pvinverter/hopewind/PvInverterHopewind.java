@@ -344,7 +344,7 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter, Electric
 				.text("Reactive Power Regulation Mode")),
 		REACTIVE_POWER_FACTOR_REGULATION(Doc.of(OpenemsType.FLOAT)
 				.accessMode(AccessMode.READ_WRITE)
-				.text("Power Factor Regulation")),
+				.unit(Unit.PERCENT)),
 		REACTIVE_POWER_REGULATION(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_WRITE)
 				.unit(Unit.VOLT_AMPERE_REACTIVE)),
@@ -485,8 +485,7 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter, Electric
 				.unit(Unit.VOLT_AMPERE)),
 		POWER_FACTOR(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				//.unit(Unit.PERCENT)
-				),
+				.unit(Unit.PERCENT)),
 		REG_40543(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
 				.text("Register 40543")),

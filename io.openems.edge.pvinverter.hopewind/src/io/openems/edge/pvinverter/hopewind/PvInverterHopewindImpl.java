@@ -104,8 +104,6 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 
 	protected Config config;
 
-	int heartBeatIndex = 0;
-
 	public PvInverterHopewindImpl() {
 		super(
 				OpenemsComponent.ChannelId.values(),
@@ -164,10 +162,8 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		if (this.startStopTarget.get() != StartStop.STOP && 
 				this.config.startStop() != StartStopConfig.STOP) {
 			try {
-				if (this.heartBeatIndex++ >= 30) {
-					this.heartBeatIndex = 0;
-					this.setHeartBeat();
-				}
+				this.setHeartBeat();
+
 			} catch (IllegalArgumentException | OpenemsNamedException e) {
 				this.logError(this.logger, "Setting HeartBeat failed: " + e.getMessage());
 				e.printStackTrace();
@@ -184,6 +180,23 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		} catch (OpenemsNamedException e) {
 			this._setRunFailed(true);
 			this.logError(this.logger, "StateMachine failed: " + e.getMessage());
+		}
+	}
+
+	private void handleInverterMode() {
+		if (!this.getActivePowerLimitMode().isDefined()) {
+			return;
+		}
+		ActivePowerLimitMode activePowerLimitModeConfig = this.config.activePowerLimitMode();
+		ActivePowerLimitMode activePowerLimitMode = this.getActivePowerLimitMode().asEnum();
+		if (activePowerLimitMode != activePowerLimitModeConfig) {
+			try {
+				this.setActivePowerLimitMode(activePowerLimitModeConfig);
+
+			} catch (OpenemsNamedException e) {
+			this.logError(this.logger, 
+				"Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
+			}
 		}
 	}
 
@@ -213,23 +226,6 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		if (voltage3 != null &&  current3 != null && powerFactor != null) {
 			this.getActivePowerL3Channel().setNextValue(voltage3/1000 * current3/1000 * powerFactor/100);
 
-		}
-	}
-
-	private void handleInverterMode() {
-		if (!this.getActivePowerLimitMode().isDefined()) {
-			return;
-		}
-		ActivePowerLimitMode activePowerLimitModeConfig = this.config.activePowerLimitMode();
-		ActivePowerLimitMode activePowerLimitMode = this.getActivePowerLimitMode().asEnum();
-		if (activePowerLimitMode != activePowerLimitModeConfig) {
-			try {
-				this.setActivePowerLimitMode(activePowerLimitModeConfig);
-
-			} catch (OpenemsNamedException e) {
-			this.logError(this.logger, 
-				"Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
-			}
 		}
 	}
 

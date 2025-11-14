@@ -3,10 +3,12 @@ package io.openems.edge.pvinverter.hopewind;
 import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 
+import io.openems.edge.common.startstop.StartStopConfig;
+
 @ObjectClassDefinition(
 		name = "PV-Inverter Hopewind",
 		description = "Implements the Hopewind PV inverter.")
-@interface Config {
+public @interface Config {
 
 	@AttributeDefinition(name = "Component-ID", description = "Unique ID of this Component")
 	String id() default "pvInverter0";
@@ -16,6 +18,12 @@ import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 
 	@AttributeDefinition(name = "Is enabled?", description = "Is this Component enabled?")
 	boolean enabled() default true;
+
+	@AttributeDefinition(name = "Start/stop behaviour", description = "Should this Component be forced to start or stop?")
+	StartStopConfig startStop() default StartStopConfig.START;
+
+	@AttributeDefinition(name = "Active Power Limit Mode", description = "Should this Inverter limit active power by actual or proportional values?")
+	ActivePowerLimitMode activePowerLimitMode() default ActivePowerLimitMode.ACTUAL;
 
 	@AttributeDefinition(name = "Modbus-ID", description = "ID of Modbus bridge.")
 	String modbus_id() default "modbus0";

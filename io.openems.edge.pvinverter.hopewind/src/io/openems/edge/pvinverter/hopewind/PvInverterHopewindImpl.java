@@ -50,6 +50,7 @@ import io.openems.edge.bridge.modbus.api.task.FC16WriteRegistersTask;
 import io.openems.edge.bridge.modbus.api.task.FC3ReadRegistersTask;
 import io.openems.edge.bridge.modbus.api.task.FC6WriteRegisterTask;
 import io.openems.edge.common.component.OpenemsComponent;
+import io.openems.edge.common.channel.EnumWriteChannel;
 import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.modbusslave.ModbusSlave;
@@ -86,6 +87,8 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		ModbusSlave, ModbusComponent, OpenemsComponent, EventHandler, StartStoppable, TimedataProvider {
 
 	private static final int ACTIVE_POWER_MAX = 60000;
+	private static final int REACTIVE_POWER_MAX = 1000;
+	private static final int APPERENT_POWER_MAX = 60000;
 
 	private final Logger logger = LoggerFactory.getLogger(PvInverterHopewindImpl.class);
 
@@ -133,7 +136,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		if (!config.enabled()) {
 			return;
 		}
-		this._setMaxApparentPower(ACTIVE_POWER_MAX);
+		this._setMaxActivePower(ACTIVE_POWER_MAX);
+		this._setMaxReactivePower(REACTIVE_POWER_MAX);
+		this._setMaxApparentPower(APPERENT_POWER_MAX);
 	}
 
 	@Override
@@ -150,78 +155,103 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		switch (event.getTopic()) {
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
 			this.handleStateMachine();
-			this.calculateMeterChannels();
-
-
-
+			this.handleMeterChannels();
+			this.handleInverterChannels();
 
 			this.calculateProductionEnergy.update(this.getActivePower().get());
 			break;
 		}
 	}
 
+	private void handleStateMachine() {
+		// Store the current State
+		this._setStateMachine(this.stateMachine.getCurrentState());
 
-	private void calculateMeterChannels(){
-		Integer V1 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.VOLTAGE_L1).value());
-		Integer V2 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.VOLTAGE_L2).value());
-		Integer V3 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.VOLTAGE_L3).value());
+		// Initialize 'Start-Stop' Channel
+		this._setStartStop(StartStop.UNDEFINED);
 
-		Integer I1 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.CURRENT_L1).value());
-		Integer I2 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.CURRENT_L2).value());
-		Integer I3 = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(ElectricityMeter.ChannelId.CURRENT_L3).value());
+		if (this.startStopTarget.get() != StartStop.STOP && 
+				this.config.startStop() != StartStopConfig.STOP) {
+			try {
+				if (this.heart_beat_index++ >= 30) {
+					System.out.println("Setting HeartBeat");
+					this.heart_beat_index = 0;
+					this.setHeartBeat();
+				}
+			} catch (IllegalArgumentException | OpenemsNamedException e) {
+				this.logError(this.logger, "Setting HeartBeat failed: " + e.getMessage());
+				e.printStackTrace();
+			}
+		}
 
-		Integer power_factor = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(PvInverterHopewind.ChannelId.POWER_FACTOR).value());
+		// Prepare the Context
+		var context = new Context(this, this.config);
+
+		// Call the StateMachine
+		try {
+			this.stateMachine.run(context);
+			this._setRunFailed(false);
+		} catch (OpenemsNamedException e) {
+			this._setRunFailed(true);
+			this.logError(this.logger, "StateMachine failed: " + e.getMessage());
+		}
+	}
+
+	private void handleMeterChannels(){
+		Integer V1 = this.getVoltageL1().get();
+		Integer V2 = this.getVoltageL2().get();
+		Integer V3 = this.getVoltageL3().get();
+
+		Integer I1 = this.getCurrentL1().get();
+		Integer I2 = this.getCurrentL2().get();
+		Integer I3 = this.getCurrentL3().get();
+
+		Integer power_factor = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(PvInverterHopewind.ChannelId.POWER_FACTOR).value().get());
 
 		if (V1 != null && V2 != null && V3 != null) {
-			this.channel(ElectricityMeter.ChannelId.VOLTAGE).setNextValue((V1 + V2 + V3) / 3);
+			this._setVoltage((V1 + V2 + V3) / 3);
 		}
 		if (I1 != null && I2 != null && I3 != null) {
-			this.channel(ElectricityMeter.ChannelId.CURRENT).setNextValue(I1 + I2 + I3);
+			this._setCurrent(I1 + I2 + I3);
 		}
 		if (V1 != null &&  I1 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L1).setNextValue((V1/1000 * I1/1000 * power_factor/100 / 1.732));
+			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L1).setNextValue(V1/1000 * I1/1000 * power_factor/100);
 		}
 		if (V2 != null &&  I2 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L2).setNextValue((V2/1000 * I2/1000 * power_factor/100 / 1.732));
+			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L2).setNextValue(V2/1000 * I2/1000 * power_factor/100);
 		}
 		if (V3 != null &&  I3 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L3).setNextValue((V3/1000 * I3/1000 * power_factor/100 / 1.732));
+			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L3).setNextValue(V3/1000 * I3/1000 * power_factor/100);
 		}
+	}
 
+	private void handleInverterChannels() {
 		ActivePowerLimitState active_state = this.channel(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE).value().asEnum();
+		//System.out.println("Active Power Regulation Mode: " + active_state);
 		
 		if (active_state != null) {
 			switch (active_state) {
 			case ActivePowerLimitState.UNDEFINED:
-				this.channel(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT).setNextValue(null);
-				break;
 			case ActivePowerLimitState.DISABLED:
-				this.channel(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT).setNextValue(ACTIVE_POWER_MAX);
+			case ActivePowerLimitState.PROPORTIONAL:
+
+				try {
+					EnumWriteChannel active_mode = this.channel(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE);
+
+					active_mode.setNextWriteValue(ActivePowerLimitState.ACTUAL);
+
+					System.out.println("Setting ACTIVE_REGULATION_MODE to ACTUAL");
+				} catch (OpenemsNamedException e) {
+					this.logError(this.logger, 
+						"Setting ACTIVE_REGULATION_MODE failed: " + e.getMessage());
+				}
 				break;
 			case ActivePowerLimitState.ACTUAL:
-				Integer actual_power = TypeUtils.getAsType(
-						OpenemsType.INTEGER, 
-						this.channel(PvInverterHopewind.ChannelId.ACTIVE_POWER_REGULATION).value());
-				if (actual_power != null) {
-					this.channel(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT).setNextValue(actual_power);
-				} else {
-					this.channel(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT).setNextValue(null);
-				}
-				break;
-			case ActivePowerLimitState.PROPORTIONAL:
-				Float percent_power = TypeUtils.getAsType(
-						OpenemsType.FLOAT, 
-						this.channel(PvInverterHopewind.ChannelId.ACTIVE_PERCENT_REGULATION).value());
-				if (percent_power != null) {
-					int limited_power = Math.round(ACTIVE_POWER_MAX * percent_power / 100f);
-					this.channel(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT).setNextValue(limited_power);
-				} else {
-					this.channel(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT).setNextValue(null);
-				}
 				break;
 			}
 		}
 	}
+
 
 	protected static final ElementToChannelConverter STRING_CONVERTER = new ElementToChannelConverter(v -> {
 		if (v == null) {
@@ -245,40 +275,6 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 
 	protected static final ElementToChannelConverter SCALE_FACTOR_MINUS_4 = new ElementToChannelScaleFactorConverter(-4);
 
-	private void handleStateMachine() {
-		// Store the current State
-		this._setStateMachine(this.stateMachine.getCurrentState());
-
-		// Initialize 'Start-Stop' Channel
-		this._setStartStop(StartStop.UNDEFINED);
-
-		if (this.startStopTarget.get() != StartStop.STOP && 
-				this.config.startStop() != StartStopConfig.STOP) {
-			try {
-				if (this.heart_beat_index++ >= 30) {
-					System.out.println("Setting HeartBeat");
-					this.heart_beat_index = 0;
-					this.setHeartBeat();
-				}				
-			} catch (IllegalArgumentException | OpenemsNamedException e) {
-				this.logError(this.logger, "Setting HeartBeat failed: " + e.getMessage());
-				e.printStackTrace();
-			}
-		}
-
-		// Prepare the Context
-		var context = new Context(this, this.config);
-
-		// Call the StateMachine
-		try {
-			this.stateMachine.run(context);
-			this._setRunFailed(false);
-
-		} catch (OpenemsNamedException e) {
-			this._setRunFailed(true);
-			this.logError(this.logger, "StateMachine failed: " + e.getMessage());
-		}
-	}
 	@Override
 	protected ModbusProtocol defineModbusProtocol() {
 		return new ModbusProtocol(this,
@@ -516,7 +512,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 				new FC3ReadRegistersTask(40011, Priority.HIGH,
 						m(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE,
 								new UnsignedWordElement(40011)),
-						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_REGULATION,
+						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
 								new UnsignedWordElement(40012), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.ACTIVE_PERCENT_REGULATION,
 								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
@@ -838,7 +834,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 				new FC16WriteRegistersTask(40011,
 						m(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE,
 								new UnsignedWordElement(40011)),
-						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_REGULATION,
+						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
 								new UnsignedWordElement(40012), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.ACTIVE_PERCENT_REGULATION,
 								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),

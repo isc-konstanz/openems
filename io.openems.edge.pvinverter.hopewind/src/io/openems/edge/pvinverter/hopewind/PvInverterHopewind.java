@@ -381,9 +381,9 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter, Electric
 		ACTIVE_REGULATION_MODE(Doc.of(ActivePowerLimitState.values())
 				.accessMode(AccessMode.READ_WRITE)
 				.text("Active Power Regulation Mode")),
-		ACTIVE_POWER_REGULATION(Doc.of(OpenemsType.INTEGER)
-				.accessMode(AccessMode.READ_WRITE)
-				.unit(Unit.WATT)),
+//		ACTIVE_POWER_REGULATION(Doc.of(OpenemsType.INTEGER)
+//				.accessMode(AccessMode.READ_WRITE)
+//				.unit(Unit.WATT)),
 		ACTIVE_PERCENT_REGULATION(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_WRITE)
 				.unit(Unit.PERCENT)),

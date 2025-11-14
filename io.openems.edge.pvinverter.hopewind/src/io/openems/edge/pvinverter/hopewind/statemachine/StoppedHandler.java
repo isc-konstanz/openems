@@ -10,28 +10,19 @@ public class StoppedHandler extends StateHandler<State, Context> {
 	@Override
 	public State runAndGetNextState(Context context) {
 		var inverter = context.getParent();
-		inverter._setStartStop(StartStop.STOP);
 
 		switch (inverter.getInverterState().asEnum()) {
-		case InverterState.STANDBY:
-		case InverterState.SELF_TEST:
-		case InverterState.STARTING:
-			return State.GO_RUNNING;
-		case InverterState.ON_GRID:
-		case InverterState.RUNNING_ALARM:
-		case InverterState.POWER_LIMITED:
-		case InverterState.DISPATCH:
-			return State.RUNNING;
+			case InverterState.FAULT:
+				return State.ERROR;
 
-		case InverterState.SHUTDOWN:
-			return State.STOPPED;
+			case InverterState.SHUTDOWN:
+				// Mark as stopped
+				inverter._setStartStop(StartStop.STOP);
 
-		case InverterState.FAULT:
-			return State.ERROR;
-
-		default:
-			return State.ERROR;
+				return State.STOPPED;
+			default:
+				break;
 		}
-
+		return State.UNDEFINED;
 	}
 }

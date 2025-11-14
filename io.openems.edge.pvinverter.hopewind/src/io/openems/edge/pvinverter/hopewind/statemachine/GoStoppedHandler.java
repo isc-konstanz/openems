@@ -2,7 +2,6 @@ package io.openems.edge.pvinverter.hopewind.statemachine;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.edge.common.statemachine.StateHandler;
-import io.openems.edge.pvinverter.hopewind.PvInverterHopewind;
 import io.openems.edge.pvinverter.hopewind.InverterState;
 import io.openems.edge.pvinverter.hopewind.statemachine.StateMachine.State;
 
@@ -13,6 +12,9 @@ public class GoStoppedHandler extends StateHandler<State, Context> {
 		var inverter = context.getParent();
 
 		switch (inverter.getInverterState().asEnum()) {
+		case InverterState.FAULT:
+			return State.ERROR;
+
 		case InverterState.STANDBY:
 		case InverterState.SELF_TEST:
 		case InverterState.STARTING:
@@ -22,18 +24,11 @@ public class GoStoppedHandler extends StateHandler<State, Context> {
 		case InverterState.DISPATCH:
 			inverter.shutdown();
 
-		case InverterState.SHUTDOWN:
-			return State.STOPPED;
-
-		case InverterState.FAULT:
-			return State.ERROR;
+			return State.GO_STOPPED;
 
 		default:
-			return State.ERROR;
+			break;
 		}
-
-
-
-
+		return State.UNDEFINED;
 	}
 }

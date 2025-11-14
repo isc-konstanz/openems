@@ -14,7 +14,6 @@ public class UndefinedHandler extends StateHandler<State, Context> {
 		if (!inverter.getInverterState().isDefined()){
 			return State.UNDEFINED;
 		}
-		
 		switch (inverter.getInverterState().asEnum()) {
 		case InverterState.STANDBY:
 		case InverterState.SELF_TEST:
@@ -34,8 +33,9 @@ public class UndefinedHandler extends StateHandler<State, Context> {
 			return State.ERROR;
 
 		default:
-			return State.ERROR;
+			break;
 		}
+		return State.UNDEFINED;
 	}
 
 }

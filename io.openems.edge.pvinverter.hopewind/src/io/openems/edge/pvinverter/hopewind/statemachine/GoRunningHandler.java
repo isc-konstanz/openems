@@ -23,35 +23,33 @@ public class GoRunningHandler extends StateHandler<State, Context> {
 	public State runAndGetNextState(Context context) throws OpenemsNamedException {
 		var inverter = context.getParent();
 
-		if (Duration.between(this.entryAt, Instant.now()).getSeconds() > 300) {
-			// Try again
-			return State.ERROR;
-		}
-
 		switch (inverter.getInverterState().asEnum()) {
+		case InverterState.FAULT:
+			return State.ERROR;
+
+		case InverterState.SHUTDOWN:
+			inverter.startup();
+
+			return State.GO_RUNNING;
+
 		case InverterState.STANDBY:
 		case InverterState.SELF_TEST:
 		case InverterState.STARTING:
-			// TODO: implement a timer here
-			break;
+			if (Duration.between(this.entryAt, Instant.now()).getSeconds() > 300) {
+				// Try again to reset
+				return State.ERROR;
+			}
+			return State.GO_RUNNING;
 
 		case InverterState.ON_GRID:
 		case InverterState.RUNNING_ALARM:
 		case InverterState.POWER_LIMITED:
 		case InverterState.DISPATCH:
-			// TODO: reset timer here
 			return State.RUNNING;
 
-		case InverterState.SHUTDOWN:
-			return State.STOPPED;
-
-		case InverterState.FAULT:
-			return State.ERROR;
-
 		default:
-			return State.ERROR;
+			break;
 		}
-
-		return State.GO_RUNNING;
+		return State.UNDEFINED;
 	}
 }

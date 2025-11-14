@@ -1,4 +1,6 @@
-launcher.etc = ${workspace}/cnf
+launcher.port = 8085
+launcher.host = localhost
+launcher.data = ${workspace}/data
 launcher.var = ${workspace}/cnf/edge.d
 launcher.tmp = ${workspace}/cache/edge
 
@@ -10,11 +12,12 @@ launcher.tmp = ${workspace}/cache/edge
 
 -runproperties:\
     felix.cm.dir=${launcher.var},\
-	felix.system.properties=${launcher.etc}/edge.properties,\
-	felix.config.properties=${launcher.etc}/config.properties,\
-	org.osgi.framework.storage=${launcher.tmp},\
-	org.apache.felix.eventadmin.Timeout=0,\
-    org.ops4j.pax.logging.DefaultServiceLog.level=INFO
+    openems.data.dir=${launcher.data}, \
+    org.osgi.framework.storage=${launcher.tmp}, \
+	org.osgi.service.http.port=${launcher.port}, \
+    org.apache.felix.http.host=${launcher.host}, \
+    org.apache.felix.eventadmin.Timeout=0, \
+	org.ops4j.pax.logging.DefaultServiceLog.level=INFO
 
 -runsystempackages:\
 	sun.misc,\

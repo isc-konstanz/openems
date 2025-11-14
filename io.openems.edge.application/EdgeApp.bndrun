@@ -1,4 +1,4 @@
-launcher.port = 8085
+launcher.port = 8080
 launcher.host = localhost
 launcher.data = ${workspace}/data
 launcher.var = ${workspace}/cnf/edge.d

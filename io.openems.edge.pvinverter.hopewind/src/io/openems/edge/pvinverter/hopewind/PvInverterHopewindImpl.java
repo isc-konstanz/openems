@@ -220,21 +220,16 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		if (!this.getActivePowerLimitMode().isDefined()) {
 			return;
 		}
-		switch (this.getActivePowerLimitMode().asEnum()) {
-		case ActivePowerLimitMode.UNDEFINED:
-		case ActivePowerLimitMode.DISABLED:
-		case ActivePowerLimitMode.PROPORTIONAL:
+		ActivePowerLimitMode activePowerLimitModeConfig = this.config.activePowerLimitMode();
+		ActivePowerLimitMode activePowerLimitMode = this.getActivePowerLimitMode().asEnum();
+		if (activePowerLimitMode != activePowerLimitModeConfig) {
 			try {
-				this.setActivePowerLimitMode(ActivePowerLimitMode.ACTUAL);
+				this.setActivePowerLimitMode(activePowerLimitModeConfig);
 
 			} catch (OpenemsNamedException e) {
 			this.logError(this.logger, 
 				"Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
 			}
-			break;
-		default:
-		case ActivePowerLimitMode.ACTUAL:
-			break;
 		}
 	}
 

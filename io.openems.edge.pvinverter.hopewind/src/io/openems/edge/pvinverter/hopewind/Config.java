@@ -22,6 +22,9 @@ public @interface Config {
 	@AttributeDefinition(name = "Start/stop behaviour", description = "Should this Component be forced to start or stop?")
 	StartStopConfig startStop() default StartStopConfig.START;
 
+	@AttributeDefinition(name = "Active Power Limit Mode", description = "Should this Inverter limit active power by actual or proportional values?")
+	ActivePowerLimitMode activePowerLimitMode() default ActivePowerLimitMode.ACTUAL;
+
 	@AttributeDefinition(name = "Modbus-ID", description = "ID of Modbus bridge.")
 	String modbus_id() default "modbus0";
 

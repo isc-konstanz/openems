@@ -174,7 +174,6 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 				this.config.startStop() != StartStopConfig.STOP) {
 			try {
 				if (this.heart_beat_index++ >= 30) {
-					System.out.println("Setting HeartBeat");
 					this.heart_beat_index = 0;
 					this.setHeartBeat();
 				}
@@ -227,20 +226,15 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 
 	private void handleInverterChannels() {
 		ActivePowerLimitState active_state = this.channel(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE).value().asEnum();
-		//System.out.println("Active Power Regulation Mode: " + active_state);
 		
 		if (active_state != null) {
 			switch (active_state) {
 			case ActivePowerLimitState.UNDEFINED:
 			case ActivePowerLimitState.DISABLED:
 			case ActivePowerLimitState.PROPORTIONAL:
-
 				try {
 					EnumWriteChannel active_mode = this.channel(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE);
-
 					active_mode.setNextWriteValue(ActivePowerLimitState.ACTUAL);
-
-					System.out.println("Setting ACTIVE_REGULATION_MODE to ACTUAL");
 				} catch (OpenemsNamedException e) {
 					this.logError(this.logger, 
 						"Setting ACTIVE_REGULATION_MODE failed: " + e.getMessage());

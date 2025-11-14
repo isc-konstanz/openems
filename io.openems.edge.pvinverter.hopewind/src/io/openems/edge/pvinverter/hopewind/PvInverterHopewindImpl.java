@@ -6,7 +6,6 @@ import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_1;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_2;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_3;
-import static io.openems.edge.bridge.modbus.api.element.WordOrder.LSWMSW;
 import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE;
 import static org.osgi.service.component.annotations.ReferenceCardinality.MANDATORY;
 import static org.osgi.service.component.annotations.ReferenceCardinality.OPTIONAL;
@@ -38,31 +37,24 @@ import io.openems.common.utils.StringUtils;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
 import io.openems.edge.bridge.modbus.api.BridgeModbus;
 import io.openems.edge.bridge.modbus.api.ElementToChannelConverter;
-import io.openems.edge.bridge.modbus.api.ElementToChannelScaleFactorConverter;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.bridge.modbus.api.ModbusProtocol;
-import io.openems.edge.bridge.modbus.api.element.SignedWordElement;
-import io.openems.edge.bridge.modbus.api.element.StringWordElement;
-import io.openems.edge.bridge.modbus.api.element.UnsignedDoublewordElement;
-import io.openems.edge.bridge.modbus.api.element.UnsignedWordElement;
 import io.openems.edge.bridge.modbus.api.element.DummyRegisterElement;
-import io.openems.edge.bridge.modbus.api.task.FC16WriteRegistersTask;
+import io.openems.edge.bridge.modbus.api.element.SignedWordElement;
+import io.openems.edge.bridge.modbus.api.element.UnsignedWordElement;
 import io.openems.edge.bridge.modbus.api.task.FC3ReadRegistersTask;
 import io.openems.edge.bridge.modbus.api.task.FC6WriteRegisterTask;
 import io.openems.edge.common.component.OpenemsComponent;
-import io.openems.edge.common.channel.EnumWriteChannel;
-import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.modbusslave.ModbusSlaveTable;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStopConfig;
 import io.openems.edge.common.startstop.StartStoppable;
-import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.common.taskmanager.Priority;
+import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.meter.api.ElectricityMeter;
 import io.openems.edge.pvinverter.api.ManagedSymmetricPvInverter;
-import io.openems.edge.pvinverter.hopewind.RunningState;
 import io.openems.edge.pvinverter.hopewind.statemachine.Context;
 import io.openems.edge.pvinverter.hopewind.statemachine.StateMachine;
 import io.openems.edge.pvinverter.hopewind.statemachine.StateMachine.State;
@@ -82,9 +74,8 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 @EventTopics({
 		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE,
 })
-public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
-		implements PvInverterHopewind, ManagedSymmetricPvInverter, ElectricityMeter,
-		ModbusSlave, ModbusComponent, OpenemsComponent, EventHandler, StartStoppable, TimedataProvider {
+public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent implements PvInverterHopewind, ManagedSymmetricPvInverter,
+		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
 
 	private static final int ACTIVE_POWER_MAX = 60000;
 	private static final int REACTIVE_POWER_MAX = 1000;
@@ -113,7 +104,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 
 	protected Config config;
 
-	int heart_beat_index = 0;
+	int heartBeatIndex = 0;
 
 	public PvInverterHopewindImpl() {
 		super(
@@ -155,9 +146,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		switch (event.getTopic()) {
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
 			this.handleStateMachine();
-			this.handleMeterChannels();
-			this.handleInverterChannels();
+			this.handleInverterMode();
 
+			this.calculatePowers();
 			this.calculateProductionEnergy.update(this.getActivePower().get());
 			break;
 		}
@@ -173,8 +164,8 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		if (this.startStopTarget.get() != StartStop.STOP && 
 				this.config.startStop() != StartStopConfig.STOP) {
 			try {
-				if (this.heart_beat_index++ >= 30) {
-					this.heart_beat_index = 0;
+				if (this.heartBeatIndex++ >= 30) {
+					this.heartBeatIndex = 0;
 					this.setHeartBeat();
 				}
 			} catch (IllegalArgumentException | OpenemsNamedException e) {
@@ -196,83 +187,96 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 		}
 	}
 
-	private void handleMeterChannels(){
-		Integer V1 = this.getVoltageL1().get();
-		Integer V2 = this.getVoltageL2().get();
-		Integer V3 = this.getVoltageL3().get();
+	private void calculatePowers(){
+		Integer voltage1 = this.getVoltageL1().get();
+		Integer voltage2 = this.getVoltageL2().get();
+		Integer voltage3 = this.getVoltageL3().get();
 
-		Integer I1 = this.getCurrentL1().get();
-		Integer I2 = this.getCurrentL2().get();
-		Integer I3 = this.getCurrentL3().get();
+		Integer current1 = this.getCurrentL1().get();
+		Integer current2 = this.getCurrentL2().get();
+		Integer current3 = this.getCurrentL3().get();
 
-		Integer power_factor = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(PvInverterHopewind.ChannelId.POWER_FACTOR).value().get());
+		Integer powerFactor = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(PvInverterHopewind.ChannelId.POWER_FACTOR).value().get());
 
-		if (V1 != null && V2 != null && V3 != null) {
-			this._setVoltage((V1 + V2 + V3) / 3);
+		if (voltage1 != null && voltage2 != null && voltage3 != null) {
+			this._setVoltage((voltage1 + voltage2 + voltage3) / 3);
 		}
-		if (I1 != null && I2 != null && I3 != null) {
-			this._setCurrent(I1 + I2 + I3);
+		if (current1 != null && current2 != null && current3 != null) {
+			this._setCurrent(current1 + current2 + current3);
 		}
-		if (V1 != null &&  I1 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L1).setNextValue(V1/1000 * I1/1000 * power_factor/100);
+		if (voltage1 != null &&  current1 != null && powerFactor != null) {
+			this.getActivePowerL1Channel().setNextValue(voltage1/1000 * current1/1000 * powerFactor/100);
 		}
-		if (V2 != null &&  I2 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L2).setNextValue(V2/1000 * I2/1000 * power_factor/100);
+		if (voltage2 != null &&  current2 != null && powerFactor != null) {
+			this.getActivePowerL2Channel().setNextValue(voltage2/1000 * current2/1000 * powerFactor/100);
 		}
-		if (V3 != null &&  I3 != null && power_factor != null) {
-			this.channel(ElectricityMeter.ChannelId.ACTIVE_POWER_L3).setNextValue(V3/1000 * I3/1000 * power_factor/100);
+		if (voltage3 != null &&  current3 != null && powerFactor != null) {
+			this.getActivePowerL3Channel().setNextValue(voltage3/1000 * current3/1000 * powerFactor/100);
+
 		}
 	}
 
-	private void handleInverterChannels() {
-		ActivePowerLimitState active_state = this.channel(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE).value().asEnum();
-		
-		if (active_state != null) {
-			switch (active_state) {
-			case ActivePowerLimitState.UNDEFINED:
-			case ActivePowerLimitState.DISABLED:
-			case ActivePowerLimitState.PROPORTIONAL:
-				try {
-					EnumWriteChannel active_mode = this.channel(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE);
-					active_mode.setNextWriteValue(ActivePowerLimitState.ACTUAL);
-				} catch (OpenemsNamedException e) {
-					this.logError(this.logger, 
-						"Setting ACTIVE_REGULATION_MODE failed: " + e.getMessage());
-				}
-				break;
-			case ActivePowerLimitState.ACTUAL:
-				break;
+	private void handleInverterMode() {
+		if (!this.getActivePowerLimitMode().isDefined()) {
+			return;
+		}
+		switch (this.getActivePowerLimitMode().asEnum()) {
+		case ActivePowerLimitMode.UNDEFINED:
+		case ActivePowerLimitMode.DISABLED:
+		case ActivePowerLimitMode.PROPORTIONAL:
+			try {
+				this.setActivePowerLimitMode(ActivePowerLimitMode.ACTUAL);
+
+			} catch (OpenemsNamedException e) {
+			this.logError(this.logger, 
+				"Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
 			}
+			break;
+		default:
+		case ActivePowerLimitMode.ACTUAL:
+			break;
 		}
 	}
 
-
-	protected static final ElementToChannelConverter STRING_CONVERTER = new ElementToChannelConverter(v -> {
-		if (v == null) {
-				return null;
+	@Override
+	public void setStartStop(StartStop value) {
+		if (this.startStopTarget.getAndSet(value) != value) {
+			// Set only if value changed
+			this.stateMachine.forceNextState(State.UNDEFINED);
 		}
-		String value = TypeUtils.getAsType(OpenemsType.STRING, v);
-		var result = new StringBuilder();
-		for (var i = 0; i <= value.length() - 2; i += 2) {
-				result.append(StringUtils.reverse(value.substring(i, i + 2)));
-		}
-		return result.toString();
-	});
+	}
 
-	protected static final ElementToChannelConverter VOLTAGE_CONVERTER = new ElementToChannelConverter(v -> {
-		if (v == null) {
-				return null;
-		}
-		int value = TypeUtils.getAsType(OpenemsType.INTEGER, v);
-		return (int) Math.round(value * 100 / 1.732);
-	});
+	@Override
+	public StartStop getStartStopTarget() {
+		return switch (this.config.startStop()) {
+		case AUTO -> this.startStopTarget.get(); // read StartStop-Channel
+		case START -> StartStop.START; // force START
+		case STOP -> StartStop.STOP; // force STOP
+		};
+	}
 
-	protected static final ElementToChannelConverter SCALE_FACTOR_MINUS_4 = new ElementToChannelScaleFactorConverter(-4);
+	@Override
+	public MeterType getMeterType() {
+		return MeterType.PRODUCTION;
+	}
+
+	@Override
+	public Timedata getTimedata() {
+		return this.timedata;
+	}
+
+	@Override
+	public ModbusSlaveTable getModbusSlaveTable(AccessMode accessMode) {
+		return new ModbusSlaveTable(
+				OpenemsComponent.getModbusSlaveNatureTable(accessMode),
+				ElectricityMeter.getModbusSlaveNatureTable(accessMode),
+				ManagedSymmetricPvInverter.getModbusSlaveNatureTable(accessMode));
+	}
 
 	@Override
 	protected ModbusProtocol defineModbusProtocol() {
 		return new ModbusProtocol(this,
-//				new FC3ReadRegistersTask(1080, Priority.HIGH,
+//				new FC3ReadRegistersTask(1080, Priority.LOW,
 //						m(PvInverterHopewind.ChannelId.REG_1080,
 //								new UnsignedWordElement(1080)),
 //						m(PvInverterHopewind.ChannelId.REG_1081,
@@ -434,17 +438,17 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 //						m(PvInverterHopewind.ChannelId.REG_30115,
 //								new UnsignedWordElement(30115))),
 
-				new FC3ReadRegistersTask(30117, Priority.LOW,
-						m(PvInverterHopewind.ChannelId.DAILY_GENERATION,
-								new UnsignedDoublewordElement(30117).wordOrder(LSWMSW), SCALE_FACTOR_MINUS_2),
-						m(PvInverterHopewind.ChannelId.CUM_GENERATION,
-								new UnsignedDoublewordElement(30119).wordOrder(LSWMSW), SCALE_FACTOR_MINUS_2),
-						m(PvInverterHopewind.ChannelId.REG_30121,
-								new UnsignedWordElement(30121)),
-						m(PvInverterHopewind.ChannelId.REG_30122,
-								new UnsignedWordElement(30122)),
-						m(PvInverterHopewind.ChannelId.REG_30123,
-								new UnsignedWordElement(30123))),
+//				new FC3ReadRegistersTask(30117, Priority.LOW,
+//						m(PvInverterHopewind.ChannelId.DAILY_GENERATION,
+//								new UnsignedDoublewordElement(30117).wordOrder(LSWMSW), SCALE_FACTOR_MINUS_2),
+//						m(PvInverterHopewind.ChannelId.CUMULATIVE_GENERATION,
+//								new UnsignedDoublewordElement(30119).wordOrder(LSWMSW), SCALE_FACTOR_MINUS_2)),
+//						m(PvInverterHopewind.ChannelId.REG_30121,
+//								new UnsignedWordElement(30121)),
+//						m(PvInverterHopewind.ChannelId.REG_30122,
+//								new UnsignedWordElement(30122)),
+//						m(PvInverterHopewind.ChannelId.REG_30123,
+//								new UnsignedWordElement(30123))),
 
 //				new FC3ReadRegistersTask(31112, Priority.LOW,
 //						m(PvInverterHopewind.ChannelId.REG_31112,
@@ -456,7 +460,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 //						m(PvInverterHopewind.ChannelId.REG_31115,
 //								new UnsignedWordElement(31115))),
 
-// Not available (Modbus Exception)
+//				//Not available (Modbus Exception)
 //				new FC3ReadRegistersTask(31119, Priority.LOW,
 //						m(PvInverterHopewind.ChannelId.NIGHT_SLEEP,
 //								new UnsignedWordElement(31119)),
@@ -477,38 +481,37 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 //						m(PvInverterHopewind.ChannelId.REG_34005,
 //								new UnsignedWordElement(34005))),
 
-				new FC3ReadRegistersTask(34074, Priority.LOW,
-						m(PvInverterHopewind.ChannelId.DRM_ENABLED,
-								new UnsignedWordElement(34074)),
-						m(PvInverterHopewind.ChannelId.RIPPLE_CONTROL_ENABLED,
-								new UnsignedWordElement(34075))),
+//				new FC3ReadRegistersTask(34074, Priority.LOW,
+//						m(PvInverterHopewind.ChannelId.DRM_ENABLED,
+//								new UnsignedWordElement(34074)),
+//						m(PvInverterHopewind.ChannelId.RIPPLE_CONTROL_ENABLED,
+//								new UnsignedWordElement(34075))),
 
-				new FC3ReadRegistersTask(34294, Priority.LOW,
-						m(PvInverterHopewind.ChannelId.NS_PROTECTION_ENABLED,
-								new UnsignedWordElement(34294)),
-						m(PvInverterHopewind.ChannelId.NS_PROTECTION_SWITCH,
-								new UnsignedWordElement(34295))),
-			  
-				new FC3ReadRegistersTask(40000, Priority.HIGH,
-						m(PvInverterHopewind.ChannelId.REG_40000,
-								new UnsignedWordElement(40000)),
-						m(PvInverterHopewind.ChannelId.REG_40001,
-								new UnsignedWordElement(40001)),
-						m(PvInverterHopewind.ChannelId.REACTIVE_REGULATION_MODE,
+//				new FC3ReadRegistersTask(34294, Priority.LOW,
+//						m(PvInverterHopewind.ChannelId.NS_PROTECTION_ENABLED,
+//								new UnsignedWordElement(34294)),
+//						m(PvInverterHopewind.ChannelId.NS_PROTECTION_SWITCH,
+//								new UnsignedWordElement(34295))),
+
+				new FC3ReadRegistersTask(40002, Priority.HIGH,
+//						m(PvInverterHopewind.ChannelId.REG_40000,
+//								new UnsignedWordElement(40000)),
+//						m(PvInverterHopewind.ChannelId.REG_40001,
+//								new UnsignedWordElement(40001)),
+						m(PvInverterHopewind.ChannelId.REACTIV_POWER_REGULATION_MODE,
 								new UnsignedWordElement(40002)),
 						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_FACTOR_REGULATION,
 								new UnsignedWordElement(40003), SCALE_FACTOR_MINUS_2),
 						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_REGULATION,
 								new UnsignedWordElement(40004), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.REACTIVE_PERCENT_REGULATION,
-								new UnsignedWordElement(40005), SCALE_FACTOR_2)),
-
-				new FC3ReadRegistersTask(40011, Priority.HIGH,
-						m(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE,
+						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_PERCENT_REGULATION,
+								new UnsignedWordElement(40005), SCALE_FACTOR_2),
+						new DummyRegisterElement(40006, 40010),
+						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_MODE,
 								new UnsignedWordElement(40011)),
 						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
 								new UnsignedWordElement(40012), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.ACTIVE_PERCENT_REGULATION,
+						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
 								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
 
 				new FC3ReadRegistersTask(40200, Priority.HIGH,
@@ -520,70 +523,56 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 								new UnsignedWordElement(40202))),
 
 				new FC3ReadRegistersTask(40500, Priority.HIGH,
-						m(PvInverterHopewind.ChannelId.MPPT_1_VOLTAGE,
+						m(PvInverterHopewind.ChannelId.DC_VOLTAGE_MPPT_1,
 								new UnsignedWordElement(40500), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.MPPT_2_VOLTAGE,
+						m(PvInverterHopewind.ChannelId.DC_VOLTAGE_MPPT_2,
 								new UnsignedWordElement(40501), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.MPPT_3_VOLTAGE,
+						m(PvInverterHopewind.ChannelId.DC_VOLTAGE_MPPT_3,
 								new UnsignedWordElement(40502), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.MPPT_4_VOLTAGE,
+						m(PvInverterHopewind.ChannelId.DC_VOLTAGE_MPPT_4,
 								new UnsignedWordElement(40503), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.REG_40504,
-								new UnsignedWordElement(40504)),
-						m(PvInverterHopewind.ChannelId.REG_40505,
-								new UnsignedWordElement(40505)),
-						m(PvInverterHopewind.ChannelId.REG_40506,
-								new UnsignedWordElement(40506)),
-						m(PvInverterHopewind.ChannelId.REG_40507,
-								new UnsignedWordElement(40507)),
-						m(PvInverterHopewind.ChannelId.STRING_1_CURRENT,
+						new DummyRegisterElement(40504, 40507),
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_1,
 								new UnsignedWordElement(40508), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_2_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_2,
 								new UnsignedWordElement(40509), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_3_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_3,
 								new UnsignedWordElement(40510), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_4_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_4,
 								new UnsignedWordElement(40511), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_5_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_5,
 								new UnsignedWordElement(40512), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_6_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_6,
 								new UnsignedWordElement(40513), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_7_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_7,
 								new UnsignedWordElement(40514), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_8_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_8,
 								new UnsignedWordElement(40515), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_9_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_9,
 								new UnsignedWordElement(40516), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_10_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_10,
 								new UnsignedWordElement(40517), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_11_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_11,
 								new UnsignedWordElement(40518), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_12_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_12,
 								new UnsignedWordElement(40519), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_13_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_13,
 								new UnsignedWordElement(40520), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_14_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_14,
 								new UnsignedWordElement(40521), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_15_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_15,
 								new UnsignedWordElement(40522), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.STRING_16_CURRENT,
+						m(PvInverterHopewind.ChannelId.DC_CURRENT_STRING_16,
 								new UnsignedWordElement(40523), SCALE_FACTOR_MINUS_1),
-						m(PvInverterHopewind.ChannelId.MPPT_1_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_MPPT_1,
 								new UnsignedWordElement(40524), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.MPPT_2_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_MPPT_2,
 								new UnsignedWordElement(40525), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.MPPT_3_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_MPPT_3,
 								new UnsignedWordElement(40526), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.MPPT_4_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_MPPT_4,
 								new UnsignedWordElement(40527), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.REG_40528,
-								new UnsignedWordElement(40528)),
-						m(PvInverterHopewind.ChannelId.REG_40529,
-								new UnsignedWordElement(40529)),
-						m(PvInverterHopewind.ChannelId.REG_40530,
-								new UnsignedWordElement(40530)),
-						m(PvInverterHopewind.ChannelId.REG_40531,
-								new UnsignedWordElement(40531)),
+						new DummyRegisterElement(40528, 40531),
 						m(ElectricityMeter.ChannelId.VOLTAGE_L1,
 								new UnsignedWordElement(40532), VOLTAGE_CONVERTER),
 						m(ElectricityMeter.ChannelId.VOLTAGE_L2,
@@ -606,8 +595,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 								new UnsignedWordElement(40541), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.POWER_FACTOR,
 								new UnsignedWordElement(40542), SCALE_FACTOR_MINUS_2),
-						m(PvInverterHopewind.ChannelId.REG_40543,
-								new UnsignedWordElement(40543)),
+						new DummyRegisterElement(40543, 40543),
 						m(PvInverterHopewind.ChannelId.TEMPERATURE,
 								new UnsignedWordElement(40544), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.INSULATION_RESISTANCE,
@@ -616,132 +604,98 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 								new UnsignedWordElement(40546)),
 						m(PvInverterHopewind.ChannelId.INVERTER_STATE,
 								new UnsignedWordElement(40547)),
-						m(PvInverterHopewind.ChannelId.TODAY_YIELD,
-								new UnsignedDoublewordElement(40548).wordOrder(LSWMSW), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.REG_40550,
-								new UnsignedWordElement(40550)),
-						m(PvInverterHopewind.ChannelId.REG_40551,
-								new UnsignedWordElement(40551)),
-						m(PvInverterHopewind.ChannelId.CO2_REDUCTION,
-								new UnsignedDoublewordElement(40552).wordOrder(LSWMSW), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.DAILY_RUNTIME,
-								new UnsignedWordElement(40554), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.TOTAL_RUNTIME,
-								new UnsignedDoublewordElement(40555).wordOrder(LSWMSW), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.REG_40557,
-								new UnsignedWordElement(40557)),
-						m(PvInverterHopewind.ChannelId.REG_40558,
-								new UnsignedWordElement(40558)),
-						m(PvInverterHopewind.ChannelId.REG_40559,
-								new UnsignedWordElement(40559)),
-						m(PvInverterHopewind.ChannelId.REG_40560,
-								new UnsignedWordElement(40560)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_1,
+						new DummyRegisterElement(40548, 40560),
+//						m(PvInverterHopewind.ChannelId.TODAY_YIELD,
+//								new UnsignedDoublewordElement(40548).wordOrder(LSWMSW), SCALE_FACTOR_1),
+//						m(PvInverterHopewind.ChannelId.CO2_REDUCTION,
+//								new UnsignedDoublewordElement(40552).wordOrder(LSWMSW), SCALE_FACTOR_1),
+//						m(PvInverterHopewind.ChannelId.DAILY_RUNTIME,
+//								new UnsignedWordElement(40554), SCALE_FACTOR_1),
+//						m(PvInverterHopewind.ChannelId.TOTAL_RUNTIME,
+//								new UnsignedDoublewordElement(40555).wordOrder(LSWMSW), SCALE_FACTOR_1),
+						m(PvInverterHopewind.ChannelId.FAULT_1,
 								new UnsignedWordElement(40561)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_2,
+						m(PvInverterHopewind.ChannelId.FAULT_2,
 								new UnsignedWordElement(40562)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_3,
+						m(PvInverterHopewind.ChannelId.FAULT_3,
 								new UnsignedWordElement(40563)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_4,
+						m(PvInverterHopewind.ChannelId.FAULT_4,
 								new UnsignedWordElement(40564)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_5,
+						m(PvInverterHopewind.ChannelId.FAULT_5,
 								new UnsignedWordElement(40565)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_6,
+						m(PvInverterHopewind.ChannelId.FAULT_6,
 								new UnsignedWordElement(40566)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_7,
+						m(PvInverterHopewind.ChannelId.FAULT_7,
 								new UnsignedWordElement(40567)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_8,
+						m(PvInverterHopewind.ChannelId.FAULT_8,
 								new UnsignedWordElement(40568)),
-						m(PvInverterHopewind.ChannelId.ALARM_WORD_1,
+						m(PvInverterHopewind.ChannelId.ALARM_1,
 								new UnsignedWordElement(40569)),
-						m(PvInverterHopewind.ChannelId.ALARM_WORD_2,
+						m(PvInverterHopewind.ChannelId.ALARM_2,
 								new UnsignedWordElement(40570)),
-						m(PvInverterHopewind.ChannelId.ALARM_WORD_3,
+						m(PvInverterHopewind.ChannelId.ALARM_3,
 								new UnsignedWordElement(40571)),
-						m(PvInverterHopewind.ChannelId.ALARM_WORD_4,
+						m(PvInverterHopewind.ChannelId.ALARM_4,
 								new UnsignedWordElement(40572)),
-						m(PvInverterHopewind.ChannelId.ALARM_WORD_5,
+						m(PvInverterHopewind.ChannelId.ALARM_5,
 								new UnsignedWordElement(40573)),
-						m(PvInverterHopewind.ChannelId.ALARM_WORD_6,
+						m(PvInverterHopewind.ChannelId.ALARM_6,
 								new UnsignedWordElement(40574)),
-						m(PvInverterHopewind.ChannelId.ALARM_WORD_7,
+						m(PvInverterHopewind.ChannelId.ALARM_7,
 								new UnsignedWordElement(40575)),
-						m(PvInverterHopewind.ChannelId.ALARM_WORD_8,
+						m(PvInverterHopewind.ChannelId.ALARM_8,
 								new UnsignedWordElement(40576)),
-						m(PvInverterHopewind.ChannelId.FAULT_WORD_9,
+						m(PvInverterHopewind.ChannelId.FAULT_9,
 								new UnsignedWordElement(40577)),
 						m(PvInverterHopewind.ChannelId.FAULT_CODE,
 								new UnsignedWordElement(40578)),
 						m(PvInverterHopewind.ChannelId.ALARM_CODE,
 								new UnsignedWordElement(40579)),
-						m(PvInverterHopewind.ChannelId.ARCING_WORD_1,
+						m(PvInverterHopewind.ChannelId.ARCING_1,
 								new UnsignedWordElement(40580)),
-						m(PvInverterHopewind.ChannelId.ARCING_WORD_2,
+						m(PvInverterHopewind.ChannelId.ARCING_2,
 								new UnsignedWordElement(40581)),
-						m(PvInverterHopewind.ChannelId.REG_40582,
-								new UnsignedWordElement(40582)),
-						m(PvInverterHopewind.ChannelId.REG_40583,
-								new UnsignedWordElement(40583)),
-						m(PvInverterHopewind.ChannelId.REG_40584,
-								new UnsignedWordElement(40584)),
-						m(PvInverterHopewind.ChannelId.REG_40585,
-								new UnsignedWordElement(40585)),
-						m(PvInverterHopewind.ChannelId.REG_40586,
-								new UnsignedWordElement(40586)),
-						m(PvInverterHopewind.ChannelId.REG_40587,
-								new UnsignedWordElement(40587)),
-						m(PvInverterHopewind.ChannelId.REG_40588,
-								new UnsignedWordElement(40588)),
-						m(PvInverterHopewind.ChannelId.REG_40589,
-								new UnsignedWordElement(40589)),
-						m(PvInverterHopewind.ChannelId.REG_40590,
-								new UnsignedWordElement(40590)),
-						m(PvInverterHopewind.ChannelId.REG_40591,
-								new UnsignedWordElement(40591)),
-						m(PvInverterHopewind.ChannelId.REG_40592,
-								new UnsignedWordElement(40592)),
-						m(PvInverterHopewind.ChannelId.REG_40593,
-								new UnsignedWordElement(40593)),
+						new DummyRegisterElement(40582, 40593),
 						m(PvInverterHopewind.ChannelId.DC_POWER,
 								new UnsignedWordElement(40594), SCALE_FACTOR_1)),
 
-				new FC3ReadRegistersTask(40601, Priority.LOW,
-						m(PvInverterHopewind.ChannelId.UNIT_ID,
-							new StringWordElement(40601, 27), STRING_CONVERTER),
-						m(PvInverterHopewind.ChannelId.REG_40628,
-							new UnsignedWordElement(40628)),
-						m(PvInverterHopewind.ChannelId.REG_40629,
-							new UnsignedWordElement(40629)),
-						m(PvInverterHopewind.ChannelId.REG_40630,
-							new UnsignedWordElement(40630)),
-						m(PvInverterHopewind.ChannelId.REG_40631,
-							new UnsignedWordElement(40631)),
-						m(PvInverterHopewind.ChannelId.REG_40632,
-							new UnsignedWordElement(40632)),
-						m(PvInverterHopewind.ChannelId.REG_40633,
-							new UnsignedWordElement(40633)),
-						m(PvInverterHopewind.ChannelId.REG_40634,
-							new UnsignedWordElement(40634)),
-						m(PvInverterHopewind.ChannelId.REG_40635,
-							new UnsignedWordElement(40635)),
-						m(PvInverterHopewind.ChannelId.REG_40636,
-							new UnsignedWordElement(40636)),
-						m(PvInverterHopewind.ChannelId.REG_40637,
-							new UnsignedWordElement(40637)),
-						m(PvInverterHopewind.ChannelId.REG_40638,       
-							new UnsignedWordElement(40638)),
-						m(PvInverterHopewind.ChannelId.REG_40639,
-							new UnsignedWordElement(40639)),
-						m(PvInverterHopewind.ChannelId.REG_40640,
-							new UnsignedWordElement(40640)),
-						m(PvInverterHopewind.ChannelId.REG_40641,
-							new UnsignedWordElement(40641)),
-						m(PvInverterHopewind.ChannelId.REG_40642,
-							new UnsignedWordElement(40642)),
-						m(PvInverterHopewind.ChannelId.REG_40643,
-							new UnsignedWordElement(40643)),
-						m(PvInverterHopewind.ChannelId.REG_40644,
-							new UnsignedWordElement(40644))),
+//				new FC3ReadRegistersTask(40601, Priority.LOW,
+//						m(PvInverterHopewind.ChannelId.UNIT_ID,
+//							new StringWordElement(40601, 27), STRING_CONVERTER),
+//						m(PvInverterHopewind.ChannelId.REG_40628,
+//							new UnsignedWordElement(40628)),
+//						m(PvInverterHopewind.ChannelId.REG_40629,
+//							new UnsignedWordElement(40629)),
+//						m(PvInverterHopewind.ChannelId.REG_40630,
+//							new UnsignedWordElement(40630)),
+//						m(PvInverterHopewind.ChannelId.REG_40631,
+//							new UnsignedWordElement(40631)),
+//						m(PvInverterHopewind.ChannelId.REG_40632,
+//							new UnsignedWordElement(40632)),
+//						m(PvInverterHopewind.ChannelId.REG_40633,
+//							new UnsignedWordElement(40633)),
+//						m(PvInverterHopewind.ChannelId.REG_40634,
+//							new UnsignedWordElement(40634)),
+//						m(PvInverterHopewind.ChannelId.REG_40635,
+//							new UnsignedWordElement(40635)),
+//						m(PvInverterHopewind.ChannelId.REG_40636,
+//							new UnsignedWordElement(40636)),
+//						m(PvInverterHopewind.ChannelId.REG_40637,
+//							new UnsignedWordElement(40637)),
+//						m(PvInverterHopewind.ChannelId.REG_40638,       
+//							new UnsignedWordElement(40638)),
+//						m(PvInverterHopewind.ChannelId.REG_40639,
+//							new UnsignedWordElement(40639)),
+//						m(PvInverterHopewind.ChannelId.REG_40640,
+//							new UnsignedWordElement(40640)),
+//						m(PvInverterHopewind.ChannelId.REG_40641,
+//							new UnsignedWordElement(40641)),
+//						m(PvInverterHopewind.ChannelId.REG_40642,
+//							new UnsignedWordElement(40642)),
+//						m(PvInverterHopewind.ChannelId.REG_40643,
+//							new UnsignedWordElement(40643)),
+//						m(PvInverterHopewind.ChannelId.REG_40644,
+//							new UnsignedWordElement(40644))),
 
 				new FC3ReadRegistersTask(40646, Priority.LOW,
 						m(PvInverterHopewind.ChannelId.RATED_POWER,
@@ -750,142 +704,125 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent
 							new UnsignedWordElement(40647))),
 
 				new FC3ReadRegistersTask(41000, Priority.HIGH,
-						m(PvInverterHopewind.ChannelId.STRING_1_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_1,
 								new UnsignedWordElement(41000), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_2_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_2,
 								new UnsignedWordElement(41001), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_3_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_3,
 								new UnsignedWordElement(41002), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_4_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_4,
 								new UnsignedWordElement(41003), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_5_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_5,
 								new UnsignedWordElement(41004), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_6_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_6,
 								new UnsignedWordElement(41005), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_7_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_7,
 								new UnsignedWordElement(41006), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_8_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_8,
 								new UnsignedWordElement(41007), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_9_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_9,
 								new UnsignedWordElement(41008), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_10_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_10,
 								new UnsignedWordElement(41009), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_11_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_11,
 								new UnsignedWordElement(41010), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_12_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_12,
 								new UnsignedWordElement(41011), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_13_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_13,
 								new UnsignedWordElement(41012), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_14_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_14,
 								new UnsignedWordElement(41013), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_15_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_15,
 								new UnsignedWordElement(41014), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.STRING_16_POWER,
+						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_16,
 								new UnsignedWordElement(41015), SCALE_FACTOR_1),
 						new DummyRegisterElement(41016, 41019)),
 
-				new FC16WriteRegistersTask(1083,
-						m(PvInverterHopewind.ChannelId.REG_1083,
-								new UnsignedWordElement(1083)),
-						m(PvInverterHopewind.ChannelId.REG_1084,
-								new UnsignedWordElement(1084)),
-						m(PvInverterHopewind.ChannelId.REG_1085,
-								new UnsignedWordElement(1085))),
+//				new FC16WriteRegistersTask(1083,
+//						m(PvInverterHopewind.ChannelId.REG_1083,
+//								new UnsignedWordElement(1083)),
+//						m(PvInverterHopewind.ChannelId.REG_1084,
+//								new UnsignedWordElement(1084)),
+//						m(PvInverterHopewind.ChannelId.REG_1085,
+//								new UnsignedWordElement(1085))),
 
-// Not available (Modbus Exception)
+//				// Not available (Modbus Exception)
 //				new FC16WriteRegistersTask(31119,
 //						m(PvInverterHopewind.ChannelId.NIGHT_SLEEP,
 //								new UnsignedWordElement(31119))),
 //						m(PvInverterHopewind.ChannelId.RSD_ENABLED,
 //								new UnsignedWordElement(31120))),
-				
+
 				new FC6WriteRegisterTask(32014,
 						m(PvInverterHopewind.ChannelId.HEART_BEAT,
 								new UnsignedWordElement(32014))),
 
-				new FC16WriteRegistersTask(34074,
-						m(PvInverterHopewind.ChannelId.DRM_ENABLED,
-								new UnsignedWordElement(34074)),
-						m(PvInverterHopewind.ChannelId.RIPPLE_CONTROL_ENABLED,
-								new UnsignedWordElement(34075))),
+//				new FC16WriteRegistersTask(34074,
+//						m(PvInverterHopewind.ChannelId.DRM_ENABLED,
+//								new UnsignedWordElement(34074)),
+//						m(PvInverterHopewind.ChannelId.RIPPLE_CONTROL_ENABLED,
+//								new UnsignedWordElement(34075))),
+//
+//				new FC16WriteRegistersTask(34294,
+//						m(PvInverterHopewind.ChannelId.NS_PROTECTION_ENABLED,
+//								new UnsignedWordElement(34294)),
+//						m(PvInverterHopewind.ChannelId.NS_PROTECTION_SWITCH,
+//								new UnsignedWordElement(34295))),
 
-				new FC16WriteRegistersTask(34294,
-						m(PvInverterHopewind.ChannelId.NS_PROTECTION_ENABLED,
-								new UnsignedWordElement(34294)),
-						m(PvInverterHopewind.ChannelId.NS_PROTECTION_SWITCH,
-								new UnsignedWordElement(34295))),
-
-				new FC16WriteRegistersTask(40002,
-						m(PvInverterHopewind.ChannelId.REACTIVE_REGULATION_MODE,
-								new UnsignedWordElement(40002)),
+				new FC6WriteRegisterTask(40002,
+						m(PvInverterHopewind.ChannelId.REACTIV_POWER_REGULATION_MODE,
+								new UnsignedWordElement(40002))),
+				new FC6WriteRegisterTask(40003,
 						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_FACTOR_REGULATION,
-								new SignedWordElement(40003), SCALE_FACTOR_MINUS_2),
+								new SignedWordElement(40003), SCALE_FACTOR_MINUS_2)),
+				new FC6WriteRegisterTask(40004,
 						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_REGULATION,
-								new UnsignedWordElement(40004), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.REACTIVE_PERCENT_REGULATION,
+								new UnsignedWordElement(40004), SCALE_FACTOR_1)),
+				new FC6WriteRegisterTask(40005,
+						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_PERCENT_REGULATION,
 								new UnsignedWordElement(40005), SCALE_FACTOR_MINUS_2)),
 
-				new FC16WriteRegistersTask(40011,
-						m(PvInverterHopewind.ChannelId.ACTIVE_REGULATION_MODE,
-								new UnsignedWordElement(40011)),
+				new FC6WriteRegisterTask(40011,
+						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_MODE,
+								new UnsignedWordElement(40011))),
+				new FC6WriteRegisterTask(40012,
 						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
-								new UnsignedWordElement(40012), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.ACTIVE_PERCENT_REGULATION,
+								new UnsignedWordElement(40012), SCALE_FACTOR_1)),
+				new FC6WriteRegisterTask(40013,
+						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
 								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
-				
-				new FC16WriteRegistersTask(40200,
+
+				new FC6WriteRegisterTask(40200,
 						m(PvInverterHopewind.ChannelId.STARTUP,
-								new UnsignedWordElement(40200)),
+								new UnsignedWordElement(40200))),
+				new FC6WriteRegisterTask(40201,
 						m(PvInverterHopewind.ChannelId.SHUTDOWN,
-								new UnsignedWordElement(40201)),
+								new UnsignedWordElement(40201))),
+				new FC6WriteRegisterTask(40202,
 						m(PvInverterHopewind.ChannelId.RESET,
 								new UnsignedWordElement(40202)))
-
 		);
 	}
 
-
-
-
-
-
-
-
-	@Override
-	public ModbusSlaveTable getModbusSlaveTable(AccessMode accessMode) {
-		return new ModbusSlaveTable(
-				OpenemsComponent.getModbusSlaveNatureTable(accessMode),
-				ElectricityMeter.getModbusSlaveNatureTable(accessMode),
-				ManagedSymmetricPvInverter.getModbusSlaveNatureTable(accessMode));
-//		PvInverterHopewind.getModbusSlaveNatureTable(accessMode));
-	}
-
-	@Override
-	public void setStartStop(StartStop value) {
-		if (this.startStopTarget.getAndSet(value) != value) {
-			// Set only if value changed
-			this.stateMachine.forceNextState(State.UNDEFINED);
+	protected static final ElementToChannelConverter STRING_CONVERTER = new ElementToChannelConverter(v -> {
+		if (v == null) {
+				return null;
 		}
-	}
+		String value = TypeUtils.getAsType(OpenemsType.STRING, v);
+		var result = new StringBuilder();
+		for (var i = 0; i <= value.length() - 2; i += 2) {
+				result.append(StringUtils.reverse(value.substring(i, i + 2)));
+		}
+		return result.toString();
+	});
 
-	@Override
-	public StartStop getStartStopTarget() {
-		return switch (this.config.startStop()) {
-		case AUTO -> this.startStopTarget.get(); // read StartStop-Channel
-		case START -> StartStop.START; // force START
-		case STOP -> StartStop.STOP; // force STOP
-		};
-	}
-
-	@Override
-	public MeterType getMeterType() {
-		return MeterType.PRODUCTION;
-	}
-
-	@Override
-	public Timedata getTimedata() {
-		return this.timedata;
-	}
+	protected static final ElementToChannelConverter VOLTAGE_CONVERTER = new ElementToChannelConverter(v -> {
+		if (v == null) {
+				return null;
+		}
+		int value = TypeUtils.getAsType(OpenemsType.INTEGER, v);
+		return (int) Math.round(value * 100 / 1.732);
+	});
 
 	@Override
 	public String debugLog() {

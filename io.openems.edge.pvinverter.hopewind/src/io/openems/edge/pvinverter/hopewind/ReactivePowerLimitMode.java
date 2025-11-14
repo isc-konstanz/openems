@@ -2,7 +2,7 @@ package io.openems.edge.pvinverter.hopewind;
 
 import io.openems.common.types.OptionsEnum;
 
-public enum ReactivePowerLimitState implements OptionsEnum {
+public enum ReactivePowerLimitMode implements OptionsEnum {
 	UNDEFINED(-1, "Undefined"),
 	DISABLED(0, "Disabled reactive output"),
 	POWER_FACTOR(1, "Power factor regulation"),
@@ -14,7 +14,7 @@ public enum ReactivePowerLimitState implements OptionsEnum {
 	private final int value;
 	private final String name;
 
-	private ReactivePowerLimitState(int value, String name) {
+	private ReactivePowerLimitMode(int value, String name) {
 		this.value = value;
 		this.name = name;
 	}

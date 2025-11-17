@@ -6,7 +6,7 @@ import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 
 @ObjectClassDefinition(//
 		name = "Edge-2-Edge Bridge", //
-		description = "Connects an energy storage system from a slave OpenEMS Edge via Modbus")
+		description = "This bridge provides an HTTP Websocket/JSON connection to a slave OpenEMS Edge")
 @interface Config {
 
 	@AttributeDefinition(name = "Component-ID", description = "Unique ID of this Component")

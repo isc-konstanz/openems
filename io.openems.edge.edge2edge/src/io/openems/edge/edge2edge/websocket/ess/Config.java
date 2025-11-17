@@ -7,7 +7,7 @@ import io.openems.common.channel.AccessMode;
 
 @ObjectClassDefinition(//
 		name = "Edge-2-Edge ESS Websocket", //
-		description = "Connects an energy storage system from a slave OpenEMS Edge via Modbus")
+		description = "Connects an energy storage system from a slave OpenEMS Edge via Websocket")
 @interface Config {
 
 	@AttributeDefinition(name = "Component-ID", description = "Unique ID of this Component")

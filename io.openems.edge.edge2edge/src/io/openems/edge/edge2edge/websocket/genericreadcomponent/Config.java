@@ -4,8 +4,8 @@ import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 
 @ObjectClassDefinition(//
-		name = "Edge-2-Edge GenericReadComponent", //
-		description = "Connects an energy storage system from a slave OpenEMS Edge via Modbus")
+		name = "Edge-2-Edge GenericReadComponent Websocket", //
+		description = "Connects a generic read component from a slave OpenEMS Edge via Websocket")
 @interface Config {
 
 	@AttributeDefinition(name = "Component-ID", description = "Unique ID of this Component")

@@ -262,7 +262,8 @@ public interface BatteryInverterRctCess extends
 		RUN_FAILED(Doc.of(Level.WARNING)
 				.text("Running the Logic failed")),
 
-		RUN_STATE(Doc.of(RunState.values())),
+		RUN_STATE(Doc.of(RunState.values())
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		/**
 		 * Voltage L1-L2.
@@ -274,7 +275,8 @@ public interface BatteryInverterRctCess extends
 		 * </ul>
 		 */
 		VOLTAGE_L1_2(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)),
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * Voltage L2-3.
 		 *
@@ -285,7 +287,8 @@ public interface BatteryInverterRctCess extends
 		 * </ul>
 		 */
 		VOLTAGE_L2_3(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)),
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * Voltage L3-L1.
 		 *
@@ -296,7 +299,8 @@ public interface BatteryInverterRctCess extends
 		 * </ul>
 		 */
 		VOLTAGE_L3_1(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)),
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		DC_VOLTAGE(Doc.of(OpenemsType.INTEGER)
 				.unit(Unit.MILLIVOLT)
@@ -311,9 +315,11 @@ public interface BatteryInverterRctCess extends
 		// TODO: Rename to TEMPERATURE_ENVIRONMENT and *_IGBT to be consistent
 		// with other inverters, as soon as the UI supports it.
 		AIR_TEMPERATURE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.DEGREE_CELSIUS)),
+				.unit(Unit.DEGREE_CELSIUS)
+				.persistencePriority(PersistencePriority.HIGH)),
 		IGBT_TEMPERATURE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.DEGREE_CELSIUS)),
+				.unit(Unit.DEGREE_CELSIUS)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		// Alarm 1
 		EP0_FAULT(Doc.of(Level.WARNING)),

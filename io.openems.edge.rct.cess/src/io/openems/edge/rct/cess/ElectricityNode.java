@@ -637,7 +637,8 @@ public interface ElectricityNode extends OpenemsComponent {
 				.persistencePriority(PersistencePriority.HIGH)),
 
 		POWER_FACTOR(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.NONE)),
+				.unit(Unit.NONE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		;
 
 		private final Doc doc;

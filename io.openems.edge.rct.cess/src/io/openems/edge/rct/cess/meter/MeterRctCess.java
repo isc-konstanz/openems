@@ -315,18 +315,24 @@ public interface MeterRctCess extends
 				.persistencePriority(PersistencePriority.HIGH)),
 	
 		VOLTAGE_HARMONIC_DISTORTION_L1(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		VOLTAGE_HARMONIC_DISTORTION_L2(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		VOLTAGE_HARMONIC_DISTORTION_L3(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
 	
 		CURRENT_HARMONIC_DISTORTION_L1(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		CURRENT_HARMONIC_DISTORTION_L2(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		CURRENT_HARMONIC_DISTORTION_L3(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
 	
 		VOLTAGE_RATIO(Doc.of(OpenemsType.INTEGER)
 				.unit(Unit.NONE)),

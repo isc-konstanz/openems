@@ -381,40 +381,52 @@ public interface BatteryRctCess extends Battery,
 		PRE_CHARGE_STATE(Doc.of(PreChargeState.values())),
 
 		PRE_CHARGE_TOTAL_VOLT(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.VOLT)),
+				.unit(Unit.VOLT)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
 		POWER(Doc.of(OpenemsType.INTEGER)
 				.unit(Unit.WATT)
 				.persistencePriority(PersistencePriority.HIGH)),
 
 		INSULATION_VALUE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.OHM)),
+				.unit(Unit.OHM)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
 		INSULATION_POSITIVE_VALUE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.OHM)),
+				.unit(Unit.OHM)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
 		INSULATION_NEGATIVE_VALUE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.OHM)),
+				.unit(Unit.OHM)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
-		MAX_CELL_TEMPERATURE_INDEX(Doc.of(OpenemsType.INTEGER)),
+		MAX_CELL_TEMPERATURE_INDEX(Doc.of(OpenemsType.INTEGER)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
-		MAX_CELL_VOLTAGE_INDEX(Doc.of(OpenemsType.INTEGER)),
+		MAX_CELL_VOLTAGE_INDEX(Doc.of(OpenemsType.INTEGER)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
-		MIN_CELL_TEMPERATURE_INDEX(Doc.of(OpenemsType.INTEGER)),
+		MIN_CELL_TEMPERATURE_INDEX(Doc.of(OpenemsType.INTEGER)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
-		MIN_CELL_VOLTAGE_INDEX(Doc.of(OpenemsType.INTEGER)),
+		MIN_CELL_VOLTAGE_INDEX(Doc.of(OpenemsType.INTEGER)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
 		SUM_CELL_VOLTAGE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)),
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		MEAN_CELL_VOLTAGE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)),
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		MEAN_CELL_TEMPERATURE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.DEGREE_CELSIUS)),
+				.unit(Unit.DEGREE_CELSIUS)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		SWITCH_BOX_TEMPERATURE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.DEGREE_CELSIUS)),
+				.unit(Unit.DEGREE_CELSIUS)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		// Rack Faults
 		BMU_HARDWARE_FAULT(Doc.of(Level.WARNING)),

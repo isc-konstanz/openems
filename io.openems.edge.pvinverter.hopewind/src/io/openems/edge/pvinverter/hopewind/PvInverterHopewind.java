@@ -4,6 +4,7 @@ import org.osgi.service.event.EventHandler;
 
 import io.openems.common.channel.AccessMode;
 import io.openems.common.channel.Level;
+import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.types.OpenemsType;
@@ -295,166 +296,217 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 
 		ACTIVE_POWER_LIMIT_MODE(Doc.of(ActivePowerLimitMode.values())
 				.accessMode(AccessMode.READ_WRITE)
-				.text("Active Power Limit Mode")),
+				.text("Active Power Limit Mode")
+				.persistencePriority(PersistencePriority.MEDIUM)),
 		ACTIVE_POWER_LIMIT_PERCENT(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_WRITE)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
 		REACTIV_POWER_REGULATION_MODE(Doc.of(ReactivePowerLimitMode.values())
 				.accessMode(AccessMode.READ_WRITE)
-				.text("Reactive Power Regulation Mode")),
+				.text("Reactive Power Regulation Mode")
+				.persistencePriority(PersistencePriority.MEDIUM)),
 		REACTIVE_POWER_REGULATION(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_WRITE)
-				.unit(Unit.VOLT_AMPERE_REACTIVE)),
+				.unit(Unit.VOLT_AMPERE_REACTIVE)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 		REACTIVE_POWER_PERCENT_REGULATION(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_WRITE)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 		REACTIVE_POWER_FACTOR_REGULATION(Doc.of(OpenemsType.FLOAT)
 				.accessMode(AccessMode.READ_WRITE)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
 		DC_VOLTAGE_MPPT_1(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.VOLT)),
+				.unit(Unit.VOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_VOLTAGE_MPPT_2(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.VOLT)),
+				.unit(Unit.VOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_VOLTAGE_MPPT_3(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.VOLT)),
+				.unit(Unit.VOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_VOLTAGE_MPPT_4(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.VOLT)),
+				.unit(Unit.VOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		
 		DC_CURRENT_STRING_1(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_2(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_3(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_4(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_5(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_6(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_7(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_8(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_9(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)), 
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)), 
 		DC_CURRENT_STRING_10(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_11(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_12(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_13(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_14(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_15(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_CURRENT_STRING_16(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.MILLIAMPERE)),
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		DC_POWER_MPPT_1(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_MPPT_2(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_MPPT_3(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_MPPT_4(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		DC_POWER_STRING_1(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_2(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_3(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_4(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_5(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_6(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_7(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_8(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_9(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_10(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_11(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_12(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_13(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_14(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_15(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 		DC_POWER_STRING_16(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.WATT)),
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		DC_POWER(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.KILOWATT)),
+				.unit(Unit.KILOWATT)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		APPERENT_POWER(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.VOLT_AMPERE)),
+				.unit(Unit.VOLT_AMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		POWER_FACTOR(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.PERCENT)),
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
 
 		TEMPERATURE(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.DEZIDEGREE_CELSIUS)),
+				.unit(Unit.DEZIDEGREE_CELSIUS)
+				.persistencePriority(PersistencePriority.HIGH)),
 		INSULATION_RESISTANCE(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.OHM)),
+				.unit(Unit.OHM)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
 //		UNIT_ID(Doc.of(OpenemsType.STRING)
 //				.accessMode(AccessMode.READ_ONLY)

@@ -1,11 +1,22 @@
 package io.openems.edge.rct.cess.batteryinverter.statemachine;
 
+import java.time.Duration;
+import java.time.Instant;
+
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.edge.common.statemachine.StateHandler;
+import io.openems.edge.rct.cess.batteryinverter.statemachine.Context;
 import io.openems.edge.rct.cess.batteryinverter.enums.RunState;
 import io.openems.edge.rct.cess.batteryinverter.statemachine.StateMachine.State;
 
 public class GoRunningHandler extends StateHandler<State, Context> {
+
+	private Instant entryAt = Instant.MIN;
+
+	@Override
+	protected void onEntry(Context context) throws OpenemsNamedException {
+		this.entryAt = Instant.now();
+	}
 
 	@Override
 	public State runAndGetNextState(Context context) throws OpenemsNamedException {
@@ -24,6 +35,9 @@ public class GoRunningHandler extends StateHandler<State, Context> {
 			return State.RUNNING;
 			
 		default:
+			if (Duration.between(this.entryAt, Instant.now()).getSeconds() < 60) {
+				return State.GO_RUNNING;
+			}
 			return State.UNDEFINED;
 		}
 	}

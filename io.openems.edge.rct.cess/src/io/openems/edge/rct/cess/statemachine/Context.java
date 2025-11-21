@@ -2,20 +2,20 @@ package io.openems.edge.rct.cess.statemachine;
 
 import java.time.Clock;
 
-import io.openems.edge.battery.api.Battery;
-import io.openems.edge.batteryinverter.api.ManagedSymmetricBatteryInverter;
 import io.openems.edge.common.statemachine.AbstractContext;
 import io.openems.edge.rct.cess.Config;
 import io.openems.edge.rct.cess.RctCess;
+import io.openems.edge.rct.cess.battery.RctCessBattery;
+import io.openems.edge.rct.cess.batteryinverter.RctCessBatteryInverter;
 
 public class Context extends AbstractContext<RctCess> {
 
 	protected final Config config;
-	protected final Battery battery;
-	protected final ManagedSymmetricBatteryInverter batteryInverter;
+	protected final RctCessBattery battery;
+	protected final RctCessBatteryInverter batteryInverter;
 	protected final Clock clock;
 
-	public Context(RctCess parent, Config config, Battery battery, ManagedSymmetricBatteryInverter batteryInverter,
+	public Context(RctCess parent, Config config, RctCessBattery battery, RctCessBatteryInverter batteryInverter,
 			Clock clock) {
 		super(parent);
 		this.config = config;

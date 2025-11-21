@@ -11,7 +11,6 @@ import io.openems.edge.common.channel.Doc;
 import io.openems.edge.common.channel.IntegerReadChannel;
 import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.component.OpenemsComponent;
-import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStoppable;
 import io.openems.edge.rct.cess.battery.enums.PreChargeState;
@@ -19,8 +18,153 @@ import io.openems.edge.rct.cess.battery.enums.RackChargeState;
 import io.openems.edge.rct.cess.battery.enums.RunState;
 import io.openems.edge.rct.cess.battery.statemachine.StateMachine.State;
 
-public interface BatteryRctCess extends Battery,
-		OpenemsComponent, ModbusComponent, ModbusSlave, StartStoppable {
+public interface RctCessBattery extends Battery,
+		OpenemsComponent, ModbusComponent, StartStoppable {
+
+	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
+
+		STATE_MACHINE(Doc.of(State.values())
+				.text("Current State of State-Machine")),
+		RUN_FAILED(Doc.of(Level.WARNING)
+				.text("Running the Logic failed")),
+
+		RUN_STATE(Doc.of(RunState.values())),
+
+		RACK_CHARGE_STATE(Doc.of(RackChargeState.values())),
+
+		// Connection States
+		DISCONNECTOR_STATE(Doc.of(OpenemsType.BOOLEAN)),
+		CONTACTOR_POSITIVE_STATE(Doc.of(OpenemsType.BOOLEAN)),
+		CONTACTOR_NEGATIVE_STATE(Doc.of(OpenemsType.BOOLEAN)),
+		PRE_CHARGE_CONNTACTOR_STATE(Doc.of(OpenemsType.BOOLEAN)),
+
+		PRE_CHARGE_STATE(Doc.of(PreChargeState.values())),
+
+		PRE_CHARGE_TOTAL_VOLT(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.VOLT)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		POWER(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		INSULATION_VALUE(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.OHM)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		INSULATION_POSITIVE_VALUE(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.OHM)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		INSULATION_NEGATIVE_VALUE(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.OHM)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		MAX_CELL_TEMPERATURE_INDEX(Doc.of(OpenemsType.INTEGER)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		MAX_CELL_VOLTAGE_INDEX(Doc.of(OpenemsType.INTEGER)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		MIN_CELL_TEMPERATURE_INDEX(Doc.of(OpenemsType.INTEGER)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		MIN_CELL_VOLTAGE_INDEX(Doc.of(OpenemsType.INTEGER)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		SUM_CELL_VOLTAGE(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		MEAN_CELL_VOLTAGE(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		MEAN_CELL_TEMPERATURE(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.DEGREE_CELSIUS)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		SWITCH_BOX_TEMPERATURE(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.DEGREE_CELSIUS)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		// Rack Faults
+		BMU_HARDWARE_FAULT(Doc.of(Level.WARNING)),
+		BCU_HARDWARE_FAULT(Doc.of(Level.WARNING)),
+		FUSE_PROTECTOR_FAULT(Doc.of(Level.WARNING)),
+		CONTACTOR_ADHESION_FAULT(Doc.of(Level.WARNING)),
+		BMU_COMMUNICATION_FAULT(Doc.of(Level.WARNING)),
+		BAU_COMMUNICATION_FAULT(Doc.of(Level.WARNING)),
+		CURRENT_SENSOR_FAULT(Doc.of(Level.WARNING)),
+		INSULATION_MONITOR_FAULT(Doc.of(Level.WARNING)),
+		DISCONNECTOR_ABNORMAL_FAULT(Doc.of(Level.WARNING)),
+
+		// Rack Warnings
+		TOTAL_VOLTAGE_HIGH_WARNING(Doc.of(Level.INFO)),
+		TOTAL_VOLTAGE_LOW_WARNING(Doc.of(Level.INFO)),
+		CELL_VOLTAGE_HIGH_WARNING(Doc.of(Level.INFO)),
+		CELL_VOLTAGE_LOW_WARNING(Doc.of(Level.INFO)),
+		CELL_CURRENT_DISCHARGE_HIGH_WARNING(Doc.of(Level.INFO)),
+		CELL_CURRENT_CHARGE_HIGH_WARNING(Doc.of(Level.INFO)),
+		CELL_TEMPERATURE_DISCHARGE_HIGH_WARNING(Doc.of(Level.INFO)),
+		CELL_TEMPERATURE_DISCHARGE_LOW_WARNING(Doc.of(Level.INFO)),
+		CELL_TEMPERATURE_CHARGE_HIGH_WARNING(Doc.of(Level.INFO)),
+		CELL_TEMPERATURE_CHARGE_LOW_WARNING(Doc.of(Level.INFO)),
+		INSULATION_LOW_WARNING(Doc.of(Level.INFO)),
+		INSULATION_HIGH_WARNING(Doc.of(Level.INFO)),
+		SWITCH_BOX_CONNECTOR_TEMPERATURE_HIGH_WARNING(Doc.of(Level.INFO)),
+		CELL_VOLTAGE_DIFFERENCE_HIGH_WARNING(Doc.of(Level.INFO)),
+		CELL_TEMPERATURE_DIFFERENCE_HIGH_WARNING(Doc.of(Level.INFO)),
+		SOC_LOW_WARNING(Doc.of(Level.INFO)),
+
+		// Rack Alarms
+		TOTAL_VOLTAGE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		TOTAL_VOLTAGE_LOW_ALARM(Doc.of(Level.WARNING)),
+		CELL_VOLTAGE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		CELL_VOLTAGE_LOW_ALARM(Doc.of(Level.WARNING)),
+		CELL_CURRENT_DISCHARGE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		CELL_CURRENT_CHARGE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_DISCHARGE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_DISCHARGE_LOW_ALARM(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_CHARGE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_CHARGE_LOW_ALARM(Doc.of(Level.WARNING)),
+		INSULATION_LOW_ALARM(Doc.of(Level.WARNING)),
+		INSULATION_HIGH_ALARM(Doc.of(Level.WARNING)),
+		SWITCH_BOX_CONNECTOR_TEMPERATURE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		CELL_VOLTAGE_DIFFERENCE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_DIFFERENCE_HIGH_ALARM(Doc.of(Level.WARNING)),
+		SOC_LOW_ALARM(Doc.of(Level.WARNING)),
+
+		// Rack Critical Alarms
+		TOTAL_VOLTAGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		TOTAL_VOLTAGE_LOW_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_VOLTAGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_VOLTAGE_LOW_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_CURRENT_DISCHARGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_CURRENT_CHARGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_DISCHARGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_DISCHARGE_LOW_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_CHARGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_CHARGE_LOW_CRITICAL(Doc.of(Level.WARNING)),
+		INSULATION_LOW_CRITICAL(Doc.of(Level.WARNING)),
+		INSULATION_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		SWITCH_BOX_CONNECTOR_TEMPERATURE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_VOLTAGE_DIFFERENCE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		CELL_TEMPERATURE_DIFFERENCE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
+		SOC_LOW_CRITICAL(Doc.of(Level.WARNING)),
+		;
+
+		private final Doc doc;
+
+		private ChannelId(Doc doc) {
+			this.doc = doc;
+		}
+
+		@Override
+		public Doc doc() {
+			return this.doc;
+		}
+	}
 
 	/**
 	 * Gets the Channel for {@link ChannelId#STATE_MACHINE}.
@@ -359,151 +503,6 @@ public interface BatteryRctCess extends Battery,
 	 */
 	public default Value<Integer> getSwitchBoxTemperature() {
 		return this.getSwitchBoxTemperatureChannel().value();
-	}
-
-	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
-
-		STATE_MACHINE(Doc.of(State.values())
-				.text("Current State of State-Machine")),
-		RUN_FAILED(Doc.of(Level.WARNING)
-				.text("Running the Logic failed")),
-
-		RUN_STATE(Doc.of(RunState.values())),
-
-		RACK_CHARGE_STATE(Doc.of(RackChargeState.values())),
-
-		// Connection States
-		DISCONNECTOR_STATE(Doc.of(OpenemsType.BOOLEAN)),
-		CONTACTOR_POSITIVE_STATE(Doc.of(OpenemsType.BOOLEAN)),
-		CONTACTOR_NEGATIVE_STATE(Doc.of(OpenemsType.BOOLEAN)),
-		PRE_CHARGE_CONNTACTOR_STATE(Doc.of(OpenemsType.BOOLEAN)),
-
-		PRE_CHARGE_STATE(Doc.of(PreChargeState.values())),
-
-		PRE_CHARGE_TOTAL_VOLT(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.VOLT)
-				.persistencePriority(PersistencePriority.MEDIUM)),
-
-		POWER(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.WATT)
-				.persistencePriority(PersistencePriority.HIGH)),
-
-		INSULATION_VALUE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.OHM)
-				.persistencePriority(PersistencePriority.MEDIUM)),
-
-		INSULATION_POSITIVE_VALUE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.OHM)
-				.persistencePriority(PersistencePriority.MEDIUM)),
-
-		INSULATION_NEGATIVE_VALUE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.OHM)
-				.persistencePriority(PersistencePriority.MEDIUM)),
-
-		MAX_CELL_TEMPERATURE_INDEX(Doc.of(OpenemsType.INTEGER)
-				.persistencePriority(PersistencePriority.MEDIUM)),
-
-		MAX_CELL_VOLTAGE_INDEX(Doc.of(OpenemsType.INTEGER)
-				.persistencePriority(PersistencePriority.MEDIUM)),
-
-		MIN_CELL_TEMPERATURE_INDEX(Doc.of(OpenemsType.INTEGER)
-				.persistencePriority(PersistencePriority.MEDIUM)),
-
-		MIN_CELL_VOLTAGE_INDEX(Doc.of(OpenemsType.INTEGER)
-				.persistencePriority(PersistencePriority.MEDIUM)),
-
-		SUM_CELL_VOLTAGE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)
-				.persistencePriority(PersistencePriority.HIGH)),
-
-		MEAN_CELL_VOLTAGE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)
-				.persistencePriority(PersistencePriority.HIGH)),
-
-		MEAN_CELL_TEMPERATURE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.DEGREE_CELSIUS)
-				.persistencePriority(PersistencePriority.HIGH)),
-
-		SWITCH_BOX_TEMPERATURE(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.DEGREE_CELSIUS)
-				.persistencePriority(PersistencePriority.HIGH)),
-
-		// Rack Faults
-		BMU_HARDWARE_FAULT(Doc.of(Level.WARNING)),
-		BCU_HARDWARE_FAULT(Doc.of(Level.WARNING)),
-		FUSE_PROTECTOR_FAULT(Doc.of(Level.WARNING)),
-		CONTACTOR_ADHESION_FAULT(Doc.of(Level.WARNING)),
-		BMU_COMMUNICATION_FAULT(Doc.of(Level.WARNING)),
-		BAU_COMMUNICATION_FAULT(Doc.of(Level.WARNING)),
-		CURRENT_SENSOR_FAULT(Doc.of(Level.WARNING)),
-		INSULATION_MONITOR_FAULT(Doc.of(Level.WARNING)),
-		DISCONNECTOR_ABNORMAL_FAULT(Doc.of(Level.WARNING)),
-
-		// Rack Warnings
-		TOTAL_VOLTAGE_HIGH_WARNING(Doc.of(Level.INFO)),
-		TOTAL_VOLTAGE_LOW_WARNING(Doc.of(Level.INFO)),
-		CELL_VOLTAGE_HIGH_WARNING(Doc.of(Level.INFO)),
-		CELL_VOLTAGE_LOW_WARNING(Doc.of(Level.INFO)),
-		CELL_CURRENT_DISCHARGE_HIGH_WARNING(Doc.of(Level.INFO)),
-		CELL_CURRENT_CHARGE_HIGH_WARNING(Doc.of(Level.INFO)),
-		CELL_TEMPERATURE_DISCHARGE_HIGH_WARNING(Doc.of(Level.INFO)),
-		CELL_TEMPERATURE_DISCHARGE_LOW_WARNING(Doc.of(Level.INFO)),
-		CELL_TEMPERATURE_CHARGE_HIGH_WARNING(Doc.of(Level.INFO)),
-		CELL_TEMPERATURE_CHARGE_LOW_WARNING(Doc.of(Level.INFO)),
-		INSULATION_LOW_WARNING(Doc.of(Level.INFO)),
-		INSULATION_HIGH_WARNING(Doc.of(Level.INFO)),
-		SWITCH_BOX_CONNECTOR_TEMPERATURE_HIGH_WARNING(Doc.of(Level.INFO)),
-		CELL_VOLTAGE_DIFFERENCE_HIGH_WARNING(Doc.of(Level.INFO)),
-		CELL_TEMPERATURE_DIFFERENCE_HIGH_WARNING(Doc.of(Level.INFO)),
-		SOC_LOW_WARNING(Doc.of(Level.INFO)),
-
-		// Rack Alarms
-		TOTAL_VOLTAGE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		TOTAL_VOLTAGE_LOW_ALARM(Doc.of(Level.WARNING)),
-		CELL_VOLTAGE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		CELL_VOLTAGE_LOW_ALARM(Doc.of(Level.WARNING)),
-		CELL_CURRENT_DISCHARGE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		CELL_CURRENT_CHARGE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_DISCHARGE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_DISCHARGE_LOW_ALARM(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_CHARGE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_CHARGE_LOW_ALARM(Doc.of(Level.WARNING)),
-		INSULATION_LOW_ALARM(Doc.of(Level.WARNING)),
-		INSULATION_HIGH_ALARM(Doc.of(Level.WARNING)),
-		SWITCH_BOX_CONNECTOR_TEMPERATURE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		CELL_VOLTAGE_DIFFERENCE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_DIFFERENCE_HIGH_ALARM(Doc.of(Level.WARNING)),
-		SOC_LOW_ALARM(Doc.of(Level.WARNING)),
-
-		// Rack Critical Alarms
-		TOTAL_VOLTAGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		TOTAL_VOLTAGE_LOW_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_VOLTAGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_VOLTAGE_LOW_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_CURRENT_DISCHARGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_CURRENT_CHARGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_DISCHARGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_DISCHARGE_LOW_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_CHARGE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_CHARGE_LOW_CRITICAL(Doc.of(Level.WARNING)),
-		INSULATION_LOW_CRITICAL(Doc.of(Level.WARNING)),
-		INSULATION_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		SWITCH_BOX_CONNECTOR_TEMPERATURE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_VOLTAGE_DIFFERENCE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		CELL_TEMPERATURE_DIFFERENCE_HIGH_CRITICAL(Doc.of(Level.WARNING)),
-		SOC_LOW_CRITICAL(Doc.of(Level.WARNING)),
-		;
-
-		private final Doc doc;
-
-		private ChannelId(Doc doc) {
-			this.doc = doc;
-		}
-
-		@Override
-		public Doc doc() {
-			return this.doc;
-		}
 	}
 
 }

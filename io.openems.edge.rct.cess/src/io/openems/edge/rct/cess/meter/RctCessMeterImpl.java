@@ -54,7 +54,7 @@ import io.openems.edge.meter.api.ElectricityMeter;
 @EventTopics({
 	EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE
 })
-public class MeterRctCessImpl extends AbstractOpenemsModbusComponent implements MeterRctCess,
+public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements RctCessMeter,
 		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave, EventHandler {
 
 	private MeterType meterType = MeterType.CONSUMPTION_METERED;
@@ -69,12 +69,12 @@ public class MeterRctCessImpl extends AbstractOpenemsModbusComponent implements 
 		super.setModbus(modbus);
 	}
 
-	public MeterRctCessImpl() {
+	public RctCessMeterImpl() {
 		super(
 				OpenemsComponent.ChannelId.values(),
 				ModbusComponent.ChannelId.values(),
 				ElectricityMeter.ChannelId.values(),
-				MeterRctCess.ChannelId.values()
+				RctCessMeter.ChannelId.values()
 		);
 		ElectricityMeter.calculatePhasesFromActivePower(this);
 	}
@@ -239,27 +239,27 @@ public class MeterRctCessImpl extends AbstractOpenemsModbusComponent implements 
 //						m(ElectricityMeter.ChannelId.REACTIVE_POWER_L3, new SignedWordElement(0x0000),
 //								INVERT_IF_TRUE(this.invert)),
 
-						m(MeterRctCess.ChannelId.POWER_FACTOR, new UnsignedWordElement(0x000E),
+						m(RctCessMeter.ChannelId.POWER_FACTOR, new UnsignedWordElement(0x000E),
 								chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_3)),
 						new DummyRegisterElement(0x000F, 0x0012),
-						m(MeterRctCess.ChannelId.VOLTAGE_HARMONIC_DISTORTION_L1, new UnsignedWordElement(0x0013),
+						m(RctCessMeter.ChannelId.VOLTAGE_HARMONIC_DISTORTION_L1, new UnsignedWordElement(0x0013),
 								chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_2)),
-						m(MeterRctCess.ChannelId.VOLTAGE_HARMONIC_DISTORTION_L2, new UnsignedWordElement(0x0014),
+						m(RctCessMeter.ChannelId.VOLTAGE_HARMONIC_DISTORTION_L2, new UnsignedWordElement(0x0014),
 								chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_2)),
-						m(MeterRctCess.ChannelId.VOLTAGE_HARMONIC_DISTORTION_L3, new UnsignedWordElement(0x0015),
+						m(RctCessMeter.ChannelId.VOLTAGE_HARMONIC_DISTORTION_L3, new UnsignedWordElement(0x0015),
 								chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_2)),
-						m(MeterRctCess.ChannelId.CURRENT_HARMONIC_DISTORTION_L1, new UnsignedWordElement(0x0016),
+						m(RctCessMeter.ChannelId.CURRENT_HARMONIC_DISTORTION_L1, new UnsignedWordElement(0x0016),
 								chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_2)),
-						m(MeterRctCess.ChannelId.CURRENT_HARMONIC_DISTORTION_L2, new UnsignedWordElement(0x0017),
+						m(RctCessMeter.ChannelId.CURRENT_HARMONIC_DISTORTION_L2, new UnsignedWordElement(0x0017),
 								chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_2)),
-						m(MeterRctCess.ChannelId.CURRENT_HARMONIC_DISTORTION_L3, new UnsignedWordElement(0x0018),
+						m(RctCessMeter.ChannelId.CURRENT_HARMONIC_DISTORTION_L3, new UnsignedWordElement(0x0018),
 								chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_2))),
 
 				new FC3ReadRegistersTask(0x000F, Priority.LOW,
 						m(ElectricityMeter.ChannelId.FREQUENCY, new UnsignedWordElement(0x000F),
 							SCALE_FACTOR_1),
-						m(MeterRctCess.ChannelId.VOLTAGE_RATIO, new UnsignedWordElement(0x0010)),
-						m(MeterRctCess.ChannelId.CURRENT_RATIO, new UnsignedWordElement(0x0011))));
+						m(RctCessMeter.ChannelId.VOLTAGE_RATIO, new UnsignedWordElement(0x0010)),
+						m(RctCessMeter.ChannelId.CURRENT_RATIO, new UnsignedWordElement(0x0011))));
 
 		if (!this.invert) {
 			modbusProtocol.addTask(new FC3ReadRegistersTask(0x0002, Priority.LOW,
@@ -309,17 +309,17 @@ public class MeterRctCessImpl extends AbstractOpenemsModbusComponent implements 
 	}
 
 	private static final ElementToChannelConverter CONVERT_FLOAT = new ElementToChannelConverter(v -> {
-	    if (v == null) {
-	        return null;
-	    }
-	    if (v instanceof Number n) {
-	        return n.floatValue();
-	    }
-	    if (v instanceof String s) {
-	        return Float.valueOf(s);
-	    }
-	    throw new IllegalArgumentException(
-	        "Type [" + v.getClass().getName() + "] not supported by float converter");
+		if (v == null) {
+			return null;
+		}
+		if (v instanceof Number n) {
+			return n.floatValue();
+		}
+		if (v instanceof String s) {
+			return Float.valueOf(s);
+		}
+		throw new IllegalArgumentException(
+			"Type [" + v.getClass().getName() + "] not supported by float converter");
 	});
 
 	@Override

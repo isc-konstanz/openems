@@ -14,8 +14,61 @@ import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.meter.api.ElectricityMeter;
 
-public interface MeterRctCess extends
+public interface RctCessMeter extends
 		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave, EventHandler {
+
+	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
+
+		POWER_FACTOR(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.NONE)
+				.persistencePriority(PersistencePriority.HIGH)),
+		POWER_FACTOR_L1(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.NONE)
+				.persistencePriority(PersistencePriority.HIGH)),
+		POWER_FACTOR_L2(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.NONE)
+				.persistencePriority(PersistencePriority.HIGH)),
+		POWER_FACTOR_L3(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.NONE)
+				.persistencePriority(PersistencePriority.HIGH)),
+	
+		VOLTAGE_HARMONIC_DISTORTION_L1(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
+		VOLTAGE_HARMONIC_DISTORTION_L2(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
+		VOLTAGE_HARMONIC_DISTORTION_L3(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
+	
+		CURRENT_HARMONIC_DISTORTION_L1(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
+		CURRENT_HARMONIC_DISTORTION_L2(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
+		CURRENT_HARMONIC_DISTORTION_L3(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.HIGH)),
+	
+		VOLTAGE_RATIO(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.NONE)),
+		CURRENT_RATIO(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.NONE)),
+		;
+
+		private final Doc doc;
+
+		private ChannelId(Doc doc) {
+			this.doc = doc;
+		}
+
+		@Override
+		public Doc doc() {
+			return this.doc;
+		}
+	}
 
 	/**
 	 * Gets the Channel for {@link ChannelId#POWER_FACTOR}.
@@ -297,59 +350,6 @@ public interface MeterRctCess extends
 	 */
 	public default Value<Integer> getCurrentRatio() {
 		return this.getCurrentRatioChannel().value();
-	}
-
-	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
-
-		POWER_FACTOR(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.NONE)
-				.persistencePriority(PersistencePriority.HIGH)),
-		POWER_FACTOR_L1(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.NONE)
-				.persistencePriority(PersistencePriority.HIGH)),
-		POWER_FACTOR_L2(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.NONE)
-				.persistencePriority(PersistencePriority.HIGH)),
-		POWER_FACTOR_L3(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.NONE)
-				.persistencePriority(PersistencePriority.HIGH)),
-	
-		VOLTAGE_HARMONIC_DISTORTION_L1(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)
-				.persistencePriority(PersistencePriority.HIGH)),
-		VOLTAGE_HARMONIC_DISTORTION_L2(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)
-				.persistencePriority(PersistencePriority.HIGH)),
-		VOLTAGE_HARMONIC_DISTORTION_L3(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)
-				.persistencePriority(PersistencePriority.HIGH)),
-	
-		CURRENT_HARMONIC_DISTORTION_L1(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)
-				.persistencePriority(PersistencePriority.HIGH)),
-		CURRENT_HARMONIC_DISTORTION_L2(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)
-				.persistencePriority(PersistencePriority.HIGH)),
-		CURRENT_HARMONIC_DISTORTION_L3(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.PERCENT)
-				.persistencePriority(PersistencePriority.HIGH)),
-	
-		VOLTAGE_RATIO(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.NONE)),
-		CURRENT_RATIO(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.NONE)),
-		;
-
-		private final Doc doc;
-
-		private ChannelId(Doc doc) {
-			this.doc = doc;
-		}
-
-		@Override
-		public Doc doc() {
-			return this.doc;
-		}
 	}
 
 }

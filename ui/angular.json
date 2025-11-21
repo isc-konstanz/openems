@@ -15,7 +15,7 @@
             "allowedCommonJsDependencies": [
               "chart.js"
             ],
-            "baseHref": "/",
+            "baseHref": "/openems/",
             "budgets": [
               {
                 "type": "initial",

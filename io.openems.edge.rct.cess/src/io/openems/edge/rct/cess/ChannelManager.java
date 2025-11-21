@@ -1,13 +1,14 @@
 package io.openems.edge.rct.cess;
 
 import io.openems.edge.battery.api.Battery;
-import io.openems.edge.batteryinverter.api.ManagedSymmetricBatteryInverter;
 import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.common.channel.AbstractChannelListenerManager;
 import io.openems.edge.common.channel.Channel;
 import io.openems.edge.common.channel.ChannelId;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.ess.api.SymmetricEss;
+import io.openems.edge.rct.cess.battery.RctCessBattery;
+import io.openems.edge.rct.cess.batteryinverter.RctCessBatteryInverter;
 
 public class ChannelManager extends AbstractChannelListenerManager {
 
@@ -21,15 +22,15 @@ public class ChannelManager extends AbstractChannelListenerManager {
 	/**
 	 * Called on Component activate().
 	 *
-	 * @param battery       the {@link Battery}
-	 * @param inverter      the {@link ManagedSymmetricBatteryInverter}
+	 * @param battery	   		the {@link RctCessBattery}
+	 * @param batteryInverter   the {@link RctCessBatteryInverter}
 	 */
-	public void activate(Battery battery, ManagedSymmetricBatteryInverter inverter) {
+	public void activate(RctCessBattery battery, RctCessBatteryInverter batteryInverter) {
 		this.addBatteryListener(battery);
-		this.addBatteryInverterListener(inverter);
+		this.addBatteryInverterListener(batteryInverter);
 	}
 
-	private void addBatteryInverterListener(ManagedSymmetricBatteryInverter batteryInverter) {
+	private void addBatteryInverterListener(RctCessBatteryInverter batteryInverter) {
 		this.<Long>addCopyListener(batteryInverter,
 				SymmetricBatteryInverter.ChannelId.ACTIVE_CHARGE_ENERGY,
 				SymmetricEss.ChannelId.ACTIVE_CHARGE_ENERGY);

@@ -1,5 +1,7 @@
 package io.openems.edge.rct.cess;
 
+import java.util.List;
+
 import org.osgi.service.event.EventHandler;
 
 import io.openems.common.channel.AccessMode;
@@ -7,6 +9,9 @@ import io.openems.common.channel.Level;
 import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
 import io.openems.common.types.OpenemsType;
+import io.openems.edge.battery.api.Battery;
+import io.openems.edge.batteryinverter.api.ManagedSymmetricBatteryInverter;
+import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.common.channel.Channel;
 import io.openems.edge.common.channel.Doc;
@@ -19,6 +24,10 @@ import io.openems.edge.common.startstop.StartStoppable;
 import io.openems.edge.ess.api.HybridEss;
 import io.openems.edge.ess.api.ManagedSymmetricEss;
 import io.openems.edge.ess.api.SymmetricEss;
+import io.openems.edge.ess.dccharger.api.EssDcCharger;
+import io.openems.edge.rct.cess.battery.RctCessBattery;
+import io.openems.edge.rct.cess.batteryinverter.RctCessBatteryInverter;
+import io.openems.edge.rct.cess.charger.RctCessDcCharger;
 import io.openems.edge.rct.cess.statemachine.StateMachine.State;
 
 public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss,
@@ -29,6 +38,55 @@ public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss,
 	 * {@link ChannelManager}.
 	 */
 	public static double EFFICIENCY_FACTOR = 0.95;
+
+	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
+
+		STATE_MACHINE(Doc.of(State.values())
+				.text("Current State of State-Machine")),
+		RUN_FAILED(Doc.of(Level.FAULT)
+				.text("Running the Logic failed")),
+
+		PV_POWER(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.MEDIUM)),
+
+		/**
+		 * Sets the Active Power in [W].
+		 *
+		 * <ul>
+		 * <li>Type: Integer
+		 * <li>Unit: W
+		 * <li>Range: negative values for Charge; positive for Discharge
+		 * </ul>
+		 */
+		SET_ACTIVE_POWER(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.WATT)
+				.accessMode(AccessMode.WRITE_ONLY)),
+		/**
+		 * Sets the Reactive Power in [var].
+		 *
+		 * <ul>
+		 * <li>Type: Integer
+		 * <li>Unit: var
+		 * <li>Range: negative values for Charge; positive for Discharge
+		 * </ul>
+		 */
+		SET_REACTIVE_POWER(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.VOLT_AMPERE_REACTIVE)
+				.accessMode(AccessMode.WRITE_ONLY)),
+		;
+
+		private final Doc doc;
+
+		private ChannelId(Doc doc) {
+			this.doc = doc;
+		}
+
+		@Override
+		public Doc doc() {
+			return this.doc;
+		}
+	}
 
 	/**
 	 * Gets the Channel for {@link ChannelId#STATE_MACHINE}.
@@ -84,7 +142,6 @@ public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss,
 	 */
 	public StartStop getStartStopTarget();
 
-
 	/**
 	 * Gets the Channel for {@link ChannelId#PV_POWER}.
 	 *
@@ -124,53 +181,32 @@ public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss,
 		this.getPvPowerChannel().setNextValue(value);
 	}
 
-	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
+	/**
+	 * Returns whether this {@link ManagedSymmetricBatteryInverter} has {@link EssDcCharger} available or not.
+	 *
+	 * @return the list of {@link EssDcCharger}
+	 */
+	public boolean hasDcChargers();
 
-		STATE_MACHINE(Doc.of(State.values())
-				.text("Current State of State-Machine")),
-		RUN_FAILED(Doc.of(Level.FAULT)
-				.text("Running the Logic failed")),
+	/**
+	 * Gets the list of {@link EssDcCharger} of this {@link ManagedSymmetricBatteryInverter}.
+	 *
+	 * @return the list of {@link EssDcCharger}
+	 */
+	public List<RctCessDcCharger> getDcChargers();
 
-		PV_POWER(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.WATT)
-				.persistencePriority(PersistencePriority.HIGH)),
+	/**
+	 * Gets the {@link Battery} of this {@link ManagedSymmetricEss}.
+	 *
+	 * @return the {@link Battery}
+	 */
+	public RctCessBattery getBattery();
 
-		/**
-		 * Sets the Active Power in [W].
-		 *
-		 * <ul>
-		 * <li>Type: Integer
-		 * <li>Unit: W
-		 * <li>Range: negative values for Charge; positive for Discharge
-		 * </ul>
-		 */
-		SET_ACTIVE_POWER(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.WATT)
-				.accessMode(AccessMode.WRITE_ONLY)),
-		/**
-		 * Sets the Reactive Power in [var].
-		 *
-		 * <ul>
-		 * <li>Type: Integer
-		 * <li>Unit: var
-		 * <li>Range: negative values for Charge; positive for Discharge
-		 * </ul>
-		 */
-		SET_REACTIVE_POWER(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.VOLT_AMPERE_REACTIVE)
-				.accessMode(AccessMode.WRITE_ONLY)),
-		;
-
-		private final Doc doc;
-
-		private ChannelId(Doc doc) {
-			this.doc = doc;
-		}
-
-		@Override
-		public Doc doc() {
-			return this.doc;
-		}
-	}
+	/**
+	 * Gets the {@link SymmetricBatteryInverter} of this {@link ManagedSymmetricEss}.
+	 *
+	 * @return the {@link SymmetricBatteryInverter}
+	 */
+	public RctCessBatteryInverter getBatteryInverter();
 
 }

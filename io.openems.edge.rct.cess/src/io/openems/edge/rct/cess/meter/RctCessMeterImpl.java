@@ -47,7 +47,7 @@ import io.openems.edge.meter.api.ElectricityMeter;
 
 @Designate(ocd = Config.class, factory = true)
 @Component(
-		name = "Meter.RCT.CESS",
+		name = "RCT.CESS.Meter",
 		immediate = true,
 		configurationPolicy = ConfigurationPolicy.REQUIRE
 )
@@ -76,7 +76,7 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 				ElectricityMeter.ChannelId.values(),
 				RctCessMeter.ChannelId.values()
 		);
-		ElectricityMeter.calculatePhasesFromActivePower(this);
+		ElectricityMeter.calculateAverageVoltageFromPhases(this);
 	}
 
 	@Activate

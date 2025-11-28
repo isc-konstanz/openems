@@ -25,12 +25,12 @@ public class ChannelManager extends AbstractChannelListenerManager {
 	 * @param battery	   		the {@link RctCessBattery}
 	 * @param batteryInverter   the {@link RctCessBatteryInverter}
 	 */
-	public void activate(RctCessBattery battery, RctCessBatteryInverter batteryInverter) {
+	public void activate(Battery battery, SymmetricBatteryInverter batteryInverter) {
 		this.addBatteryListener(battery);
 		this.addBatteryInverterListener(batteryInverter);
 	}
 
-	private void addBatteryInverterListener(RctCessBatteryInverter batteryInverter) {
+	private void addBatteryInverterListener(SymmetricBatteryInverter batteryInverter) {
 		this.<Long>addCopyListener(batteryInverter,
 				SymmetricBatteryInverter.ChannelId.ACTIVE_CHARGE_ENERGY,
 				SymmetricEss.ChannelId.ACTIVE_CHARGE_ENERGY);

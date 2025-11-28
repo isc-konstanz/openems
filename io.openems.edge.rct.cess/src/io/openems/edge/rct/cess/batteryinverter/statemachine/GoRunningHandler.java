@@ -5,7 +5,6 @@ import java.time.Instant;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.edge.common.statemachine.StateHandler;
-import io.openems.edge.rct.cess.batteryinverter.statemachine.Context;
 import io.openems.edge.rct.cess.batteryinverter.enums.RunState;
 import io.openems.edge.rct.cess.batteryinverter.statemachine.StateMachine.State;
 

@@ -314,7 +314,7 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements RctCe
 
 	@Override
 	public boolean hasDcChargers() {
-		return this.chargers.isEmpty();
+		return !this.chargers.isEmpty();
 	}
 
 	@Override

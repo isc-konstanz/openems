@@ -17,7 +17,6 @@ import org.osgi.service.metatype.annotations.Designate;
 
 import io.openems.common.channel.AccessMode;
 import io.openems.common.exceptions.OpenemsException;
-import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.common.component.AbstractOpenemsComponent;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.event.EdgeEventConstants;
@@ -67,7 +66,6 @@ public class RctCessDcChargerImpl extends AbstractOpenemsComponent implements Rc
 	public RctCessDcChargerImpl() {
 		super(
 				OpenemsComponent.ChannelId.values(),
-				ModbusComponent.ChannelId.values(),
 				EssDcCharger.ChannelId.values(),
 				RctCessDcCharger.ChannelId.values()
 		);
@@ -98,30 +96,32 @@ public class RctCessDcChargerImpl extends AbstractOpenemsComponent implements Rc
 		if (this.ess == null) {
 			return;
 		}
-		var inverter = this.ess.getBatteryInverter();
-		if (inverter == null || !inverter.getDcPower().isDefined()) {
+		var batteryInverter = this.ess.getBatteryInverter();
+		if (batteryInverter == null || !batteryInverter.getDcPower().isDefined()) {
 			return;
 		}
 		var battery = this.ess.getBattery();
-		if (battery == null || !battery.getPower().isDefined() || !battery.getCurrent().isDefined()) {
+		if (battery == null || !battery.getVoltage().isDefined() || !battery.getCurrent().isDefined()) {
 			return;
 		}
-		var batteryPower = TypeUtils.multiply(this.getVoltage().get(), this.getCurrent().get());
+		var batteryPower = TypeUtils.multiply(battery.getVoltage().get(), battery.getCurrent().get());
 
-		var dcPower = inverter.getDcPower().get();
+		var dcPower = batteryInverter.getDcPower().get();
 		var pvPower = Math.max(TypeUtils.subtract(dcPower, batteryPower), 0);
-		var pvRatio = pvPower / dcPower;
-
 		this._setActualPower(pvPower);
-		this._setCurrent(TypeUtils.multiply(inverter.getDcCurrent().get(), 1000, pvRatio));
-		this._setVoltage(TypeUtils.multiply(inverter.getDcVoltage().get(), 1000));
+
+		var dcVoltage = batteryInverter.getDcVoltage().get();
+		this._setVoltage(dcVoltage);
+
+		var pvCurrent = TypeUtils.divide(pvPower, dcVoltage / 1000);
+		this._setCurrent(pvCurrent);
 	}
 
 	/**
 	 * Calculate the Energy values from ActualPower.
 	 */
 	private void calculateEnergy() {
-		var actualPower = this.getActualPower().get();
+		var actualPower = this.getActualPowerChannel().getNextValue().get();
 		if (actualPower == null) {
 			// Not available
 			this.calculateActualEnergy.update(null);

@@ -15,7 +15,7 @@ public class StartBatteryInverterHandler extends StateHandler<State, Context> {
 		}
 
 		if (inverter.isStarted()) {
-			return State.STARTED;
+			return State.RUNNING;
 		}
 
 		inverter.start();

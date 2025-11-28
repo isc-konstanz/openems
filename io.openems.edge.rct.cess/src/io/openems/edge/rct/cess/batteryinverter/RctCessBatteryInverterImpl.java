@@ -6,6 +6,7 @@ import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_1;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.chain;
 import static io.openems.edge.common.sum.GridMode.ON_GRID;
+import static io.openems.edge.rct.cess.batteryinverter.statemachine.StateMachine.State.UNDEFINED;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -30,6 +31,7 @@ import io.openems.common.channel.AccessMode;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
 import io.openems.edge.battery.api.Battery;
+import io.openems.edge.batteryinverter.api.BatteryInverterTimeoutFailure;
 import io.openems.edge.batteryinverter.api.ManagedSymmetricBatteryInverter;
 import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
@@ -67,9 +69,9 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 @EventTopics({
 	EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE,
 })
-public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent implements RctCessBatteryInverter, 
-		ManagedSymmetricBatteryInverter, SymmetricBatteryInverter, ElectricityNode,
-		OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
+public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent implements
+		RctCessBatteryInverter, ManagedSymmetricBatteryInverter, SymmetricBatteryInverter, BatteryInverterTimeoutFailure,
+		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
 
 	private final Logger log = LoggerFactory.getLogger(RctCessBatteryInverterImpl.class);
 	private final StateMachine stateMachine = new StateMachine(State.UNDEFINED);
@@ -103,6 +105,7 @@ public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent i
 				ModbusComponent.ChannelId.values(),
 				StartStoppable.ChannelId.values(),
 				ElectricityNode.ChannelId.values(),
+				BatteryInverterTimeoutFailure.ChannelId.values(),
 				SymmetricBatteryInverter.ChannelId.values(),
 				ManagedSymmetricBatteryInverter.ChannelId.values(),
 				RctCessBatteryInverter.ChannelId.values());
@@ -128,6 +131,18 @@ public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent i
 	}
 
 	@Override
+	public void clearBatteryInverterTimeoutFailure() {
+		try {
+			this._setTimeoutStartBatteryInverter(false);
+			this._setTimeoutStopBatteryInverter(false);
+
+			this.stateMachine.forceNextState(UNDEFINED);
+		} catch (Exception e) {
+			this.logError(this.log, e.getClass().getSimpleName() + ": " + e.getMessage());
+		}
+	}
+
+	@Override
 	public void run(Battery battery, int setActivePower, int setReactivePower) throws OpenemsNamedException {
 		// Store the current State
 		this._setStateMachine(this.stateMachine.getCurrentState());
@@ -138,7 +153,8 @@ public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent i
 		// TODO Set battery limits and other business logic
 
 		// Prepare Context
-		var context = new Context(this, this.config, battery, setActivePower, setReactivePower);
+		var context = new Context(this, this.config, this.componentManager.getClock(),
+				battery, setActivePower, setReactivePower);
 
 		// Call the StateMachine
 		try {

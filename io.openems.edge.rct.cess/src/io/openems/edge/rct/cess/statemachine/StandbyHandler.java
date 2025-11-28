@@ -4,7 +4,7 @@ import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.statemachine.StateHandler;
 import io.openems.edge.rct.cess.statemachine.StateMachine.State;
 
-public class StartedHandler extends StateHandler<State, Context> {
+public class StandbyHandler extends StateHandler<State, Context> {
 
 	@Override
 	public State runAndGetNextState(Context context) {
@@ -14,12 +14,12 @@ public class StartedHandler extends StateHandler<State, Context> {
 			return State.ERROR;
 		}
 
-		if (!context.isEssStarted()) {
+		if (!context.isEssStopped()) {
 			return State.ERROR;
 		}
 
-		// Mark as started
-		ess._setStartStop(StartStop.START);
-		return State.STARTED;
+		ess._setStartStop(StartStop.STOP);
+		return State.STANDBY;
 	}
+
 }

@@ -18,9 +18,11 @@ import io.openems.edge.common.channel.Doc;
 import io.openems.edge.common.channel.IntegerReadChannel;
 import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.component.OpenemsComponent;
+import io.openems.edge.common.jsonapi.ComponentJsonApi;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStoppable;
+import io.openems.edge.ess.api.EssTimeoutFailure;
 import io.openems.edge.ess.api.HybridEss;
 import io.openems.edge.ess.api.ManagedSymmetricEss;
 import io.openems.edge.ess.api.SymmetricEss;
@@ -29,9 +31,11 @@ import io.openems.edge.rct.cess.battery.RctCessBattery;
 import io.openems.edge.rct.cess.batteryinverter.RctCessBatteryInverter;
 import io.openems.edge.rct.cess.charger.RctCessDcCharger;
 import io.openems.edge.rct.cess.statemachine.StateMachine.State;
+import io.openems.edge.timedata.api.TimedataProvider;
 
-public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss,
-		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, EventHandler, StartStoppable {
+public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss, EssTimeoutFailure,
+		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, ComponentJsonApi,
+		CycleProvider, TimedataProvider, EventHandler, StartStoppable {
 
 	/**
 	 * Efficiency factor to calculate AC Charge/Discharge limits from DC. Used at

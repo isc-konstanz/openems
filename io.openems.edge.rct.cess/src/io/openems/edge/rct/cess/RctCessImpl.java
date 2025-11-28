@@ -2,6 +2,7 @@ package io.openems.edge.rct.cess;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_2;
+import static io.openems.edge.common.cycle.Cycle.DEFAULT_CYCLE_TIME;
 import static io.openems.edge.common.type.Phase.SingleOrAllPhase.ALL;
 import static io.openems.edge.ess.power.api.Pwr.ACTIVE;
 import static io.openems.edge.ess.power.api.Pwr.REACTIVE;
@@ -33,6 +34,8 @@ import org.slf4j.LoggerFactory;
 import io.openems.common.channel.AccessMode;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
+import io.openems.common.jsonrpc.serialization.EmptyObject;
+import io.openems.common.session.Role;
 import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
 import io.openems.edge.bridge.modbus.api.BridgeModbus;
@@ -43,13 +46,18 @@ import io.openems.edge.bridge.modbus.api.task.FC6WriteRegisterTask;
 import io.openems.edge.common.channel.IntegerWriteChannel;
 import io.openems.edge.common.component.ComponentManager;
 import io.openems.edge.common.component.OpenemsComponent;
+import io.openems.edge.common.cycle.Cycle;
 import io.openems.edge.common.event.EdgeEventConstants;
+import io.openems.edge.common.jsonapi.ComponentJsonApi;
+import io.openems.edge.common.jsonapi.EdgeGuards;
+import io.openems.edge.common.jsonapi.JsonApiBuilder;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.modbusslave.ModbusSlaveNatureTable;
 import io.openems.edge.common.modbusslave.ModbusSlaveTable;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStoppable;
 import io.openems.edge.common.type.TypeUtils;
+import io.openems.edge.ess.api.EssTimeoutFailure;
 import io.openems.edge.ess.api.HybridEss;
 import io.openems.edge.ess.api.ManagedSymmetricEss;
 import io.openems.edge.ess.api.SymmetricEss;
@@ -58,6 +66,7 @@ import io.openems.edge.ess.power.api.Power;
 import io.openems.edge.rct.cess.battery.RctCessBattery;
 import io.openems.edge.rct.cess.batteryinverter.RctCessBatteryInverter;
 import io.openems.edge.rct.cess.charger.RctCessDcCharger;
+import io.openems.edge.rct.cess.jsonrpc.ClearTimeoutFailure;
 import io.openems.edge.rct.cess.statemachine.Context;
 import io.openems.edge.rct.cess.statemachine.StateMachine;
 import io.openems.edge.rct.cess.statemachine.StateMachine.State;
@@ -74,10 +83,12 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 @EventTopics({
 		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE,
 })
-public class RctCessImpl extends AbstractOpenemsModbusComponent implements RctCess, HybridEss, ManagedSymmetricEss, SymmetricEss, 
-		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
+public class RctCessImpl extends AbstractOpenemsModbusComponent implements
+		RctCess, HybridEss, ManagedSymmetricEss, SymmetricEss, EssTimeoutFailure,
+		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, ComponentJsonApi,
+		CycleProvider, TimedataProvider, EventHandler, StartStoppable {
 
-	private final Logger logger = LoggerFactory.getLogger(RctCessImpl.class);
+	private final Logger log = LoggerFactory.getLogger(RctCessImpl.class);
 	private final StateMachine stateMachine = new StateMachine(UNDEFINED);
 	private final ChannelManager channelManager = new ChannelManager(this);
 
@@ -89,6 +100,9 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements RctCe
 			HybridEss.ChannelId.DC_DISCHARGE_ENERGY);
 
 	private Config config = null;
+
+	@Reference
+	private Cycle cycle;
 
 	@Reference
 	private Power power;
@@ -133,6 +147,7 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements RctCe
 				ModbusComponent.ChannelId.values(),
 				StartStoppable.ChannelId.values(),
 				ElectricityNode.ChannelId.values(),
+				EssTimeoutFailure.ChannelId.values(),
 				SymmetricEss.ChannelId.values(),
 				ManagedSymmetricEss.ChannelId.values(),
 				HybridEss.ChannelId.values(),
@@ -174,6 +189,29 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements RctCe
 	}
 
 	@Override
+	public void clearEssTimeoutFailure() {
+		try {
+			this.battery.clearBatteryTimeoutFailure();
+			this.batteryInverter.clearBatteryInverterTimeoutFailure();
+
+			this.stateMachine.forceNextState(UNDEFINED);
+
+		} catch (Exception e) {
+			this.logError(this.log, e.getClass().getSimpleName() + ": " + e.getMessage());
+		}
+	}
+
+	@Override
+	public void buildJsonApiRoutes(JsonApiBuilder builder) {
+		builder.handleRequest(new ClearTimeoutFailure(), endpoint -> {
+			endpoint.setGuards(EdgeGuards.roleIsAtleast(Role.ADMIN));
+		}, call -> {
+			this.clearEssTimeoutFailure();
+			return EmptyObject.INSTANCE;
+		});
+	}
+
+	@Override
 	public void handleEvent(Event event) {
 		if (!this.isEnabled()) {
 			return;
@@ -208,7 +246,7 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements RctCe
 
 		} catch (OpenemsNamedException e) {
 			this._setRunFailed(true);
-			this.logError(this.logger, "StateMachine failed: " + e.getMessage());
+			this.logError(this.log, "StateMachine failed: " + e.getMessage());
 		}
 	}
 
@@ -251,7 +289,6 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements RctCe
 	@Override
 	public void setStartStop(StartStop value) {
 		if (this.startStopTarget.getAndSet(value) != value) {
-			// Set only if value changed
 			this.stateMachine.forceNextState(State.UNDEFINED);
 		}
 	}
@@ -295,6 +332,11 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements RctCe
 
 	protected ComponentManager getComponentManager() {
 		return this.componentManager;
+	}
+
+	@Override
+	public int getCycleTime() {
+		return this.cycle != null ? this.cycle.getCycleTime() : DEFAULT_CYCLE_TIME;
 	}
 
 	@Override

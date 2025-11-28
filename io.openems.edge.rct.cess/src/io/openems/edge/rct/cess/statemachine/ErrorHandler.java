@@ -13,6 +13,13 @@ public class ErrorHandler extends StateHandler<State, Context> {
 	}
 
 	@Override
+	protected void onExit(Context context) throws OpenemsNamedException {
+		final var ess = context.getParent();
+
+		ess.clearEssTimeoutFailure();
+	}
+
+	@Override
 	public State runAndGetNextState(Context context) {
 		final var ess = context.getParent();
 		final var battery = context.battery;

@@ -17,10 +17,10 @@ public class UndefinedHandler extends StateHandler<State, Context> {
 					// Has Faults -> error handling
 					? State.ERROR
 					// No Faults -> start
-					: State.GO_RUNNING;
+					: State.STARTING;
 
 		case STOP // force STOP
-			-> State.GO_STOPPED;
+			-> State.STOPPING;
 		};
 	}
 

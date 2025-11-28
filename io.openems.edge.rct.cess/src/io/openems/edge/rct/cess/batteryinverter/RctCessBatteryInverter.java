@@ -6,6 +6,7 @@ import io.openems.common.channel.Level;
 import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
 import io.openems.common.types.OpenemsType;
+import io.openems.edge.batteryinverter.api.BatteryInverterTimeoutFailure;
 import io.openems.edge.batteryinverter.api.ManagedSymmetricBatteryInverter;
 import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
@@ -23,8 +24,9 @@ import io.openems.edge.rct.cess.batteryinverter.statemachine.StateMachine.State;
 import io.openems.edge.timedata.api.TimedataProvider;
 
 public interface RctCessBatteryInverter extends 
-		ManagedSymmetricBatteryInverter, SymmetricBatteryInverter,
-		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
+		ManagedSymmetricBatteryInverter, SymmetricBatteryInverter, BatteryInverterTimeoutFailure,
+		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave,
+		TimedataProvider, EventHandler, StartStoppable {
 
 	public static final int MAX_APPARENT_POWER = 100_000; // [W]
 
@@ -32,6 +34,12 @@ public interface RctCessBatteryInverter extends
 
 	public static final int DC_MIN_VOLTAGE = 200;
 	public static final int DC_MAX_VOLTAGE = 950;
+
+	/**
+	 * After how many seconds will commands be retried to send, 
+	 * e.g. for starting the battery-inverter.
+	 */
+	public static int TIMEOUT = 300;
 
 	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
 

@@ -1,20 +1,21 @@
 package io.openems.edge.rct.cess.batteryinverter.statemachine;
 
-import java.time.Duration;
-import java.time.Instant;
-
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
+import io.openems.common.timedata.Timeout;
 import io.openems.edge.common.statemachine.StateHandler;
+import io.openems.edge.rct.cess.batteryinverter.RctCessBatteryInverter;
 import io.openems.edge.rct.cess.batteryinverter.enums.RunState;
 import io.openems.edge.rct.cess.batteryinverter.statemachine.StateMachine.State;
 
-public class GoRunningHandler extends StateHandler<State, Context> {
+public class StartingHandler extends StateHandler<State, Context> {
 
-	private Instant entryAt = Instant.MIN;
+	private final Timeout undefinedTimeout = Timeout.ofSeconds(StateMachine.WAIT_IN_UNDEFINED_STATE_SECONDS);
+	private final Timeout errorTimeout = Timeout.ofSeconds(RctCessBatteryInverter.TIMEOUT);
 
 	@Override
 	protected void onEntry(Context context) throws OpenemsNamedException {
-		this.entryAt = Instant.now();
+		this.undefinedTimeout.start(context.clock);
+		this.errorTimeout.start(context.clock);
 	}
 
 	@Override
@@ -22,9 +23,6 @@ public class GoRunningHandler extends StateHandler<State, Context> {
 		var inverter = context.getParent();
 
 		switch (inverter.getRunState().asEnum()) {
-		case RunState.STANDBY:
-			return State.GO_RUNNING;
-
 		// FIXME: RunState values > 6 do exist, but are not documented in the protocol documentation.
 		case RunState.UNDEFINED:
 		case RunState.CHARGING:
@@ -32,12 +30,19 @@ public class GoRunningHandler extends StateHandler<State, Context> {
 		case RunState.DISCHARGING:
 		case RunState.DISCHARGING_DERATED:
 			return State.RUNNING;
-			
+
+		case RunState.STANDBY:
+        	// TODO: Initiate starting procedure
+			// return State.STARTING;
 		default:
-			if (Duration.between(this.entryAt, Instant.now()).getSeconds() < 60) {
-				return State.GO_RUNNING;
+			if (this.errorTimeout.elapsed(context.clock)) {
+				inverter._setTimeoutStartBatteryInverter(true);
+				return State.ERROR;
 			}
-			return State.UNDEFINED;
+			if (this.undefinedTimeout.elapsed(context.clock)) {
+				return State.UNDEFINED;
+			}
+			return State.STARTING;
 		}
 	}
 }

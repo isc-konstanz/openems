@@ -5,6 +5,7 @@ import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.DIRECT
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_2;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_3;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_1;
+import static io.openems.edge.rct.cess.battery.statemachine.StateMachine.State.UNDEFINED;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -28,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
 import io.openems.edge.battery.api.Battery;
+import io.openems.edge.battery.api.BatteryTimeoutFailure;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
 import io.openems.edge.bridge.modbus.api.BridgeModbus;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
@@ -57,7 +59,8 @@ import io.openems.edge.rct.cess.battery.statemachine.StateMachine.State;
 		// EdgeEventConstants.TOPIC_CYCLE_BEFORE_PROCESS_IMAGE,
 		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE
 })
-public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implements RctCessBattery, Battery,
+public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implements 
+		RctCessBattery, Battery, BatteryTimeoutFailure,
 		OpenemsComponent, ModbusComponent, EventHandler, StartStoppable {
 
 	private static final int NUMBER_OF_RACK_UNITS = 5;
@@ -91,6 +94,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 				ModbusComponent.ChannelId.values(),
 				StartStoppable.ChannelId.values(),
 				Battery.ChannelId.values(),
+				BatteryTimeoutFailure.ChannelId.values(),
 				RctCessBattery.ChannelId.values()
 		);
 
@@ -132,6 +136,18 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 		}
 	}
 
+	@Override
+	public void clearBatteryTimeoutFailure() {
+		try {
+			this._setTimeoutStartBattery(false);
+			this._setTimeoutStopBattery(false);
+
+			this.stateMachine.forceNextState(UNDEFINED);
+		} catch (Exception e) {
+			this.logError(this.log, e.getClass().getSimpleName() + ": " + e.getMessage());
+		}
+	}
+
 	private void handleStateMachine() {
 		// Store the current State
 		this._setStateMachine(this.stateMachine.getCurrentState());
@@ -140,7 +156,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 		this._setStartStop(StartStop.UNDEFINED);
 
 		// Prepare Context
-		var context = new Context(this, this.config);
+		var context = new Context(this, this.config, this.componentManager.getClock());
 
 		// Call the StateMachine
 		try {

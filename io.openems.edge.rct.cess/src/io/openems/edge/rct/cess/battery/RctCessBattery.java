@@ -5,6 +5,7 @@ import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
 import io.openems.common.types.OpenemsType;
 import io.openems.edge.battery.api.Battery;
+import io.openems.edge.battery.api.BatteryTimeoutFailure;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.common.channel.Channel;
 import io.openems.edge.common.channel.Doc;
@@ -18,8 +19,14 @@ import io.openems.edge.rct.cess.battery.enums.RackChargeState;
 import io.openems.edge.rct.cess.battery.enums.RunState;
 import io.openems.edge.rct.cess.battery.statemachine.StateMachine.State;
 
-public interface RctCessBattery extends Battery,
+public interface RctCessBattery extends Battery, BatteryTimeoutFailure,
 		OpenemsComponent, ModbusComponent, StartStoppable {
+
+	/**
+	 * After how many seconds will commands be retried to send, 
+	 * e.g. for starting the battery.
+	 */
+	public static int TIMEOUT = 300;
 
 	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
 

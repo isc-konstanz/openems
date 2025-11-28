@@ -32,6 +32,13 @@ public class ChannelManager extends AbstractChannelListenerManager {
 
 	private void addBatteryInverterListener(SymmetricBatteryInverter batteryInverter) {
 		this.<Long>addCopyListener(batteryInverter,
+				BatteryInverterTimeoutFailure.ChannelId.TIMEOUT_START_BATTERY_INVERTER,
+				EssTimeoutFailure.ChannelId.TIMEOUT_START_BATTERY_INVERTER);
+		this.<Long>addCopyListener(batteryInverter,
+				BatteryInverterTimeoutFailure.ChannelId.TIMEOUT_STOP_BATTERY_INVERTER,
+				EssTimeoutFailure.ChannelId.TIMEOUT_STOP_BATTERY_INVERTER);
+
+		this.<Long>addCopyListener(batteryInverter,
 				SymmetricBatteryInverter.ChannelId.ACTIVE_CHARGE_ENERGY,
 				SymmetricEss.ChannelId.ACTIVE_CHARGE_ENERGY);
 		this.<Long>addCopyListener(batteryInverter,
@@ -102,6 +109,13 @@ public class ChannelManager extends AbstractChannelListenerManager {
 	}
 
 	private void addBatteryListener(Battery battery) {
+		this.<Long>addCopyListener(battery,
+				BatteryTimeoutFailure.ChannelId.TIMEOUT_START_BATTERY,
+				EssTimeoutFailure.ChannelId.TIMEOUT_START_BATTERY);
+		this.<Long>addCopyListener(battery,
+				BatteryTimeoutFailure.ChannelId.TIMEOUT_STOP_BATTERY,
+				EssTimeoutFailure.ChannelId.TIMEOUT_STOP_BATTERY);
+
 		this.addCopyListener(battery,
 				Battery.ChannelId.CAPACITY,
 				SymmetricEss.ChannelId.CAPACITY);

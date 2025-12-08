@@ -28,8 +28,6 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 
 	public static final int VOLTAGE_CONTROL_FILTER_TIME_CONSTANT = 10; // [seconds]
 
-//	private static final int ESS_PROTECTION_EXTREME_LIMIT_TIMEOUT = 240; // [seconds]
-
 	private final RctCess parent;
 
 	private final Pt1filter pt1FilterChargeMaxCurrentVoltageLimit;
@@ -46,7 +44,6 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 	protected float lastAllowedBatteryChargePower;
 	protected float lastAllowedBatteryDischargePower;
 
-//	private Instant lastEssProtectionEntry = null;
 	private Instant lastCalculate = null;
 
 	@Override
@@ -89,14 +86,8 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 		final var voltRegulationDischargeMaxCurrent = calculateMaxCurrent(battery, inverter, cycleTime,
 				this.pt1FilterDischargeMaxCurrentVoltageLimit, TypeUtils::max, TypeUtils::sum, false);
 
-//		parent._setEvpChargeMaxCurrent(voltRegulationChargeMaxCurrent);
-//		parent._setEvpDischargeMaxCurrent(voltRegulationDischargeMaxCurrent);
-
 		chargeMaxCurrent = TypeUtils.min(chargeMaxCurrent, voltRegulationChargeMaxCurrent);
 		dischargeMaxCurrent = TypeUtils.min(dischargeMaxCurrent, voltRegulationDischargeMaxCurrent);
-
-//		final var current = battery.getCurrentChannel().value();
-//		this.checkEssVoltageProtectionExtremes(clockProvider, chargeMaxCurrent, dischargeMaxCurrent, current);
 
 		final var voltage = battery.getVoltageChannel().getNextValue().get();
 		this.calculateAllowedChargeDischargePower(clockProvider, this.parent.isStarted(),
@@ -111,8 +102,7 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 	 * @param clockProvider       the {@link ClockProvider}
 	 * @param isStarted           is the ESS started?
 	 * @param chargeMaxCurrent    the {@link Battery.ChannelId#CHARGE_MAX_CURRENT}
-	 * @param dischargeMaxCurrent the
-	 *                            {@link Battery.ChannelId#DISCHARGE_MAX_CURRENT}
+	 * @param dischargeMaxCurrent the {@link Battery.ChannelId#DISCHARGE_MAX_CURRENT}
 	 * @param voltage             the {@link Battery.ChannelId#VOLTAGE}
 	 */
 	protected void calculateAllowedChargeDischargePower(ClockProvider clockProvider, boolean isStarted,
@@ -178,43 +168,6 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 		this.lastAllowedBatteryDischargePower = discharge;
 	}
 
-//	private void checkEssVoltageProtectionExtremes(ClockProvider clockProvider, Integer chargeMaxCurrent,
-//			Integer dischargeMaxCurrent, Value<Integer> current) {
-//		if (!(this.parent instanceof EssVoltageProtection ess)) {
-//			return;
-//		}
-//		if (dischargeMaxCurrent == null || chargeMaxCurrent == null || !current.isDefined()) {
-//			return;
-//		}
-//		if (dischargeMaxCurrent >= 0 || chargeMaxCurrent >= 0) {
-//			this.lastEssProtectionEntry = null;
-//			ess._setEvpDeepDischargeProtection(false);
-//			ess._setEvpOverChargeProtection(false);
-//			return;
-//		}
-//
-//		if (this.lastEssProtectionEntry == null) {
-//			this.lastEssProtectionEntry = Instant.now(clockProvider.getClock());
-//		}
-//
-//		if (dischargeMaxCurrent < 0
-//				&& current.get() >= 0
-//				&& this.isExtremeTimeoutPassed()) {
-//			ess._setEvpDeepDischargeProtection(true);
-//		}
-//
-//		if (chargeMaxCurrent < 0
-//				&& current.get() <= 0
-//				&& this.isExtremeTimeoutPassed()) {
-//			ess._setEvpOverChargeProtection(true);
-//		}
-//	}
-//
-//	private boolean isExtremeTimeoutPassed() {
-//		return Duration.between(this.lastEssProtectionEntry, Instant.now())
-//				.getSeconds() > ESS_PROTECTION_EXTREME_LIMIT_TIMEOUT;
-//	}
-
 	/**
 	 * Applies the max increase ramp, built from MAX_INCREASE_PERCENTAGE.
 	 *
@@ -243,8 +196,6 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 			int chargeMaxVoltage,
 			int dischargeMinVoltage,
 			Integer innerResistance,
-//			Integer bvpChargeBms,
-//			Integer bvpDischargeBms,
 			int inverterDcMinVoltage,
 			int inverterDcMaxVoltage) {
 		private static RegulationValues from(Battery battery, SymmetricBatteryInverter inverter) {
@@ -254,8 +205,6 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 			var chargeMaxVoltage = battery.getChargeMaxVoltage().get();
 			var dischargeMinVoltage = battery.getDischargeMinVoltage().get();
 			var innerResistance = battery.getInnerResistance().get();
-//			var bvpChargeBms = battery.getBvpChargeBms().get();
-//			var bvpDischargeBms = battery.getBvpDischargeBms().get();
 			var inverterDcMinVoltage = inverter.getDcMinVoltage().get();
 			var inverterDcMaxVoltage = inverter.getDcMaxVoltage().get();
 			if (!isBatteryStarted
@@ -282,9 +231,6 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 			return null;
 		}
 
-//		final var batteryLimit = invert
-//				? TypeUtils.min(regulationValues.chargeMaxVoltage, regulationValues.bvpChargeBms)
-//				: TypeUtils.max(regulationValues.dischargeMinVoltage, regulationValues.bvpDischargeBms);
 		final var batteryLimit = invert
 				? regulationValues.chargeMaxVoltage
 				: regulationValues.dischargeMinVoltage;

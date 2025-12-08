@@ -56,7 +56,6 @@ import io.openems.edge.rct.cess.battery.statemachine.StateMachine.State;
 		configurationPolicy = ConfigurationPolicy.REQUIRE
 )
 @EventTopics({
-//		EdgeEventConstants.TOPIC_CYCLE_BEFORE_PROCESS_IMAGE,
 		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE
 })
 public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implements 
@@ -76,8 +75,6 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 	private final AtomicReference<StartStop> startStopTarget = new AtomicReference<>(StartStop.UNDEFINED);
 
 	private Config config = null;
-
-//	private BatteryProtection batteryProtection = null;
 
 	@Reference
 	private ConfigurationAdmin cm;
@@ -119,10 +116,6 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 			return;
 		}
 		RctCessBattery.calculatePowerFromVoltageAndCurrent(this);
-
-//		this.batteryProtection = BatteryProtection.create(this)
-//				.applyBatteryProtectionDefinition(new BatteryProtectionDefinition(), this.componentManager)
-//				.build();
 	}
 
 	@Override
@@ -137,9 +130,6 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 			return;
 		}
 		switch (event.getTopic()) {
-//			case EdgeEventConstants.TOPIC_CYCLE_BEFORE_PROCESS_IMAGE:
-//				this.batteryProtection.apply();
-//				break;
 			case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
 				this.handleStateMachine();
 				break;
@@ -293,14 +283,6 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 								new UnsignedWordElement(0x0010), SCALE_FACTOR_MINUS_1),
 						m(Battery.ChannelId.DISCHARGE_MAX_CURRENT,
 								new UnsignedWordElement(0x0011), SCALE_FACTOR_MINUS_1),
-//						m(BatteryVoltageProtection.ChannelId.BVP_CHARGE_BMS,
-//								new UnsignedWordElement(0x0010), SCALE_FACTOR_MINUS_1),
-//						m(BatteryVoltageProtection.ChannelId.BVP_DISCHARGE_BMS,
-//								new UnsignedWordElement(0x0011), SCALE_FACTOR_MINUS_1),
-//						m(BatteryProtection.ChannelId.BP_CHARGE_BMS,
-//								new UnsignedWordElement(0x0010), SCALE_FACTOR_MINUS_1),
-//						m(BatteryProtection.ChannelId.BP_DISCHARGE_BMS,
-//								new UnsignedWordElement(0x0011), SCALE_FACTOR_MINUS_1),
 						m(RctCessBattery.ChannelId.MAX_CELL_VOLTAGE_INDEX,
 								new SignedWordElement(0x0012), DIRECT_1_TO_1),
 						m(Battery.ChannelId.MAX_CELL_VOLTAGE,

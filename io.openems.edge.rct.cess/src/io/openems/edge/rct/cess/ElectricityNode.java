@@ -1,5 +1,7 @@
 package io.openems.edge.rct.cess;
 
+import java.util.function.Function;
+
 import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
 import io.openems.common.types.OpenemsType;
@@ -10,6 +12,183 @@ import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.component.OpenemsComponent;
 
 public interface ElectricityNode extends OpenemsComponent {
+
+	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
+
+		/**
+		 * Active Power L1.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#WATT}
+		 * <li>Range: see {@link ElectricityNode}
+		 * </ul>
+		 */
+		ACTIVE_POWER_L1(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
+		/**
+		 * Active Power L2.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#WATT}
+		 * <li>Range: see {@link ElectricityNode}
+		 * </ul>
+		 */
+		ACTIVE_POWER_L2(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
+		/**
+		 * Active Power L3.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#WATT}
+		 * <li>Range: see {@link ElectricityNode}
+		 * </ul>
+		 */
+		ACTIVE_POWER_L3(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.WATT)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		/**
+		 * Reactive Power L1.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#VOLT_AMPERE_REACTIVE}
+		 * </ul>
+		 */
+		REACTIVE_POWER_L1(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.VOLT_AMPERE_REACTIVE)
+				.persistencePriority(PersistencePriority.HIGH)),
+		/**
+		 * Reactive Power L2.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#VOLT_AMPERE_REACTIVE}
+		 * </ul>
+		 */
+		REACTIVE_POWER_L2(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.VOLT_AMPERE_REACTIVE)
+				.persistencePriority(PersistencePriority.HIGH)),
+		/**
+		 * Reactive Power L3.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#VOLT_AMPERE_REACTIVE}
+		 * </ul>
+		 */
+		REACTIVE_POWER_L3(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.VOLT_AMPERE_REACTIVE)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		/**
+		 * Voltage L1.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#MILLIVOLT}
+		 * <li>Range: only positive values
+		 * </ul>
+		 */
+		VOLTAGE_L1(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
+		/**
+		 * Voltage L2.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#MILLIVOLT}
+		 * <li>Range: only positive values
+		 * </ul>
+		 */
+		VOLTAGE_L2(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
+		/**
+		 * Voltage L3.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#MILLIVOLT}
+		 * <li>Range: only positive values
+		 * </ul>
+		 */
+		VOLTAGE_L3(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIVOLT)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		/**
+		 * Current L1.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#MILLIAMPERE}
+		 * <li>Range: see {@link ElectricityNode}
+		 * </ul>
+		 */
+		CURRENT_L1(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
+		/**
+		 * Current L2.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#MILLIAMPERE}
+		 * <li>Range: see {@link ElectricityNode}
+		 * </ul>
+		 */
+		CURRENT_L2(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
+		/**
+		 * Current L3.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#MILLIAMPERE}
+		 * <li>Range: see {@link ElectricityNode}
+		 * </ul>
+		 */
+		CURRENT_L3(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIAMPERE)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		/**
+		 * Frequency.
+		 *
+		 * <ul>
+		 * <li>Type: {@link OpenemsType#INTEGER}
+		 * <li>Unit: {@link Unit#MILLIHERTZ}
+		 * <li>Range: only positive values
+		 * </ul>
+		 */
+		FREQUENCY(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.MILLIHERTZ)
+				.persistencePriority(PersistencePriority.HIGH)),
+
+		POWER_FACTOR(Doc.of(OpenemsType.FLOAT)
+				.unit(Unit.NONE)
+				.persistencePriority(PersistencePriority.HIGH)),
+		;
+
+		private final Doc doc;
+
+		private ChannelId(Doc doc) {
+			this.doc = doc;
+		}
+
+		@Override
+		public Doc doc() {
+			return this.doc;
+		}
+	}
 
 	/**
 	 * Gets the Channel for {@link ChannelId#ACTIVE_POWER_L1}.
@@ -476,181 +655,90 @@ public interface ElectricityNode extends OpenemsComponent {
 		return this.getFrequencyChannel().value();
 	}
 
-	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
+	public static void calculatePhasePowersFromVoltageAndCurrent(ElectricityNode meter) {
+		var powerFactor = meter.getPowerFactorChannel();
 
-		/**
-		 * Active Power L1.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#WATT}
-		 * <li>Range: see {@link ElectricityNode}
-		 * </ul>
-		 */
-		ACTIVE_POWER_L1(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.WATT)
-				.persistencePriority(PersistencePriority.HIGH)),
-		/**
-		 * Active Power L2.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#WATT}
-		 * <li>Range: see {@link ElectricityNode}
-		 * </ul>
-		 */
-		ACTIVE_POWER_L2(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.WATT)
-				.persistencePriority(PersistencePriority.HIGH)),
-		/**
-		 * Active Power L3.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#WATT}
-		 * <li>Range: see {@link ElectricityNode}
-		 * </ul>
-		 */
-		ACTIVE_POWER_L3(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.WATT)
-				.persistencePriority(PersistencePriority.HIGH)),
+		calculateL1PowersFromVoltageAndCurrent(meter, powerFactor);
+		calculateL2PowersFromVoltageAndCurrent(meter, powerFactor);
+		calculateL3PowersFromVoltageAndCurrent(meter, powerFactor);
+	}
 
-		/**
-		 * Reactive Power L1.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#VOLT_AMPERE_REACTIVE}
-		 * </ul>
-		 */
-		REACTIVE_POWER_L1(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.VOLT_AMPERE_REACTIVE)
-				.persistencePriority(PersistencePriority.HIGH)),
-		/**
-		 * Reactive Power L2.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#VOLT_AMPERE_REACTIVE}
-		 * </ul>
-		 */
-		REACTIVE_POWER_L2(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.VOLT_AMPERE_REACTIVE)
-				.persistencePriority(PersistencePriority.HIGH)),
-		/**
-		 * Reactive Power L3.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#VOLT_AMPERE_REACTIVE}
-		 * </ul>
-		 */
-		REACTIVE_POWER_L3(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.VOLT_AMPERE_REACTIVE)
-				.persistencePriority(PersistencePriority.HIGH)),
+	private static void calculateL1PowersFromVoltageAndCurrent(ElectricityNode meter, FloatReadChannel powerFactorL1) {
+		_calculatePhasePowersFromVoltageAndCurrent(meter, powerFactorL1,
+	            ElectricityNode::getActivePowerL1Channel,
+	            ElectricityNode::getReactivePowerL1Channel,
+	            ElectricityNode::getVoltageL1Channel,
+	            ElectricityNode::getCurrentL1Channel
+	    );
+	}
 
-		/**
-		 * Voltage L1.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#MILLIVOLT}
-		 * <li>Range: only positive values
-		 * </ul>
-		 */
-		VOLTAGE_L1(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)
-				.persistencePriority(PersistencePriority.HIGH)),
-		/**
-		 * Voltage L2.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#MILLIVOLT}
-		 * <li>Range: only positive values
-		 * </ul>
-		 */
-		VOLTAGE_L2(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)
-				.persistencePriority(PersistencePriority.HIGH)),
-		/**
-		 * Voltage L3.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#MILLIVOLT}
-		 * <li>Range: only positive values
-		 * </ul>
-		 */
-		VOLTAGE_L3(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIVOLT)
-				.persistencePriority(PersistencePriority.HIGH)),
+	private static void calculateL2PowersFromVoltageAndCurrent(ElectricityNode meter, FloatReadChannel powerFactorL2) {
+		_calculatePhasePowersFromVoltageAndCurrent(meter, powerFactorL2,
+	            ElectricityNode::getActivePowerL2Channel,
+	            ElectricityNode::getReactivePowerL2Channel,
+	            ElectricityNode::getVoltageL2Channel,
+	            ElectricityNode::getCurrentL2Channel
+	    );
+	}
 
-		/**
-		 * Current L1.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#MILLIAMPERE}
-		 * <li>Range: see {@link ElectricityNode}
-		 * </ul>
-		 */
-		CURRENT_L1(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIAMPERE)
-				.persistencePriority(PersistencePriority.HIGH)),
-		/**
-		 * Current L2.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#MILLIAMPERE}
-		 * <li>Range: see {@link ElectricityNode}
-		 * </ul>
-		 */
-		CURRENT_L2(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIAMPERE)
-				.persistencePriority(PersistencePriority.HIGH)),
-		/**
-		 * Current L3.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#MILLIAMPERE}
-		 * <li>Range: see {@link ElectricityNode}
-		 * </ul>
-		 */
-		CURRENT_L3(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIAMPERE)
-				.persistencePriority(PersistencePriority.HIGH)),
+	private static void calculateL3PowersFromVoltageAndCurrent(ElectricityNode meter, FloatReadChannel powerFactorL3) {
+		_calculatePhasePowersFromVoltageAndCurrent(meter, powerFactorL3,
+	            ElectricityNode::getActivePowerL3Channel,
+	            ElectricityNode::getReactivePowerL3Channel,
+	            ElectricityNode::getVoltageL3Channel,
+	            ElectricityNode::getCurrentL3Channel
+	    );
+	}
 
-		/**
-		 * Frequency.
-		 *
-		 * <ul>
-		 * <li>Type: {@link OpenemsType#INTEGER}
-		 * <li>Unit: {@link Unit#MILLIHERTZ}
-		 * <li>Range: only positive values
-		 * </ul>
-		 */
-		FREQUENCY(Doc.of(OpenemsType.INTEGER)
-				.unit(Unit.MILLIHERTZ)
-				.persistencePriority(PersistencePriority.HIGH)),
+	public static <M> void _calculatePhasePowersFromVoltageAndCurrent(
+	        M meter,
+	        FloatReadChannel powerFactorChannel,
+	        Function<M, IntegerReadChannel> activePower,
+	        Function<M, IntegerReadChannel> reactivePower,
+	        Function<M, IntegerReadChannel> voltage,
+	        Function<M, IntegerReadChannel> current
+	) {
+		IntegerReadChannel activePowerChannel = activePower.apply(meter);
+		IntegerReadChannel reactivePowerChannel = reactivePower.apply(meter);
+		IntegerReadChannel voltageChannel = voltage.apply(meter);
+		IntegerReadChannel currentChannel = current.apply(meter);
 
-		POWER_FACTOR(Doc.of(OpenemsType.FLOAT)
-				.unit(Unit.NONE)
-				.persistencePriority(PersistencePriority.HIGH)),
-		;
+	    powerFactorChannel.onSetNextValue(value -> {
+	        calculatePhasePowersFromVoltageAndCurrent(activePowerChannel, reactivePowerChannel,
+	        		voltageChannel.value().get(), currentChannel.value().get(), value.get());
+	    });
+	    voltageChannel.onSetNextValue(value -> {
+	        calculatePhasePowersFromVoltageAndCurrent(activePowerChannel, reactivePowerChannel,
+	        		value.get(), currentChannel.value().get(), powerFactorChannel.value().get());
+	    });
+	    currentChannel.onSetNextValue(value -> {
+	        calculatePhasePowersFromVoltageAndCurrent(activePowerChannel, reactivePowerChannel,
+	        		voltageChannel.value().get(), value.get(), powerFactorChannel.value().get());
+	    });
+	}
 
-		private final Doc doc;
+    private static void calculatePhasePowersFromVoltageAndCurrent(IntegerReadChannel activePower, IntegerReadChannel reactivePower,
+    		Integer voltage, Integer current, Float PowerFactor) {
+    	if (voltage == null || current == null || PowerFactor == null) {
+    		return;
+    	}
+    	var apparentPower = calcualteApparentPhasePowerFromVoltageAndCurrent(voltage, current);
 
-		private ChannelId(Doc doc) {
-			this.doc = doc;
-		}
+    	activePower.setNextValue(calculateActivePhasePowerFromApparentPower(apparentPower, PowerFactor));
+    	reactivePower.setNextValue(calculateReactivePhasePowerFromApparentPower(apparentPower, PowerFactor));
+    }
 
-		@Override
-		public Doc doc() {
-			return this.doc;
-		}
+	private static int calcualteApparentPhasePowerFromVoltageAndCurrent(int voltage, int current) {
+		return (int) (((double) voltage / 1000.0) * ((double) current / 1000.0));
+	}
+
+	private static int calculateActivePhasePowerFromApparentPower(int apparentPower, float powerFactor) {
+		return (int) (apparentPower * powerFactor);
+	}
+
+	private static int calculateReactivePhasePowerFromApparentPower(int apparentPower, float powerFactor) {
+		double phi = Math.acos(powerFactor);
+		return (int) (apparentPower * Math.sin(phi));
 	}
 
 }

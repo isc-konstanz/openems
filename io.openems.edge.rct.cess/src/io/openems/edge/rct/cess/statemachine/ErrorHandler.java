@@ -16,7 +16,7 @@ public class ErrorHandler extends StateHandler<State, Context> {
 	protected void onExit(Context context) throws OpenemsNamedException {
 		final var ess = context.getParent();
 
-		ess.clearEssTimeoutFailure();
+		ess.executeErrorAcknowledge();
 	}
 
 	@Override

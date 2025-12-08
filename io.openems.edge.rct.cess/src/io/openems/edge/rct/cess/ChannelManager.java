@@ -1,11 +1,16 @@
 package io.openems.edge.rct.cess;
 
 import io.openems.edge.battery.api.Battery;
+import io.openems.edge.battery.api.BatteryErrorAcknowledge;
+import io.openems.edge.batteryinverter.api.BatteryInverterErrorAcknowledge;
 import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.common.channel.AbstractChannelListenerManager;
 import io.openems.edge.common.channel.Channel;
 import io.openems.edge.common.channel.ChannelId;
+import io.openems.edge.common.component.ClockProvider;
 import io.openems.edge.common.component.OpenemsComponent;
+import io.openems.edge.common.startstop.StartStoppable;
+import io.openems.edge.ess.api.EssErrorAcknowledge;
 import io.openems.edge.ess.api.SymmetricEss;
 import io.openems.edge.rct.cess.battery.RctCessBattery;
 import io.openems.edge.rct.cess.batteryinverter.RctCessBatteryInverter;
@@ -13,30 +18,40 @@ import io.openems.edge.rct.cess.batteryinverter.RctCessBatteryInverter;
 public class ChannelManager extends AbstractChannelListenerManager {
 
 	private final RctCess parent;
+	private final AllowedPowerHandler powerHandler;
 
 	public ChannelManager(RctCess parent) {
 		super();
 		this.parent = parent;
+		this.powerHandler = new AllowedPowerHandler(parent);
 	}
 
 	/**
 	 * Called on Component activate().
 	 *
-	 * @param battery	   		the {@link RctCessBattery}
-	 * @param batteryInverter   the {@link RctCessBatteryInverter}
+	 * @param battery		the {@link RctCessBattery}
+	 * @param inverter		the {@link RctCessBatteryInverter}
 	 */
-	public void activate(Battery battery, SymmetricBatteryInverter batteryInverter) {
-		this.addBatteryListener(battery);
-		this.addBatteryInverterListener(batteryInverter);
+	public void activate(ClockProvider clock, Battery battery, SymmetricBatteryInverter inverter) {
+		this.addBatteryListener(clock, battery, inverter);
+		this.addInverterListener(inverter);
+		this.addEssListener(clock, battery, inverter);
 	}
 
-	private void addBatteryInverterListener(SymmetricBatteryInverter batteryInverter) {
+	private void addEssListener(ClockProvider clock, Battery battery, SymmetricBatteryInverter inverter) {
+		if (this.parent instanceof StartStoppable) {
+			this.addOnChangeListener(this.parent, StartStoppable.ChannelId.START_STOP, (ignored0, ignored1) -> 
+					this.powerHandler.accept(clock, battery, inverter));
+		}
+	}
+
+	private void addInverterListener(SymmetricBatteryInverter batteryInverter) {
 		this.<Long>addCopyListener(batteryInverter,
-				BatteryInverterTimeoutFailure.ChannelId.TIMEOUT_START_BATTERY_INVERTER,
-				EssTimeoutFailure.ChannelId.TIMEOUT_START_BATTERY_INVERTER);
+				BatteryInverterErrorAcknowledge.ChannelId.TIMEOUT_START_BATTERY_INVERTER,
+				EssErrorAcknowledge.ChannelId.TIMEOUT_START_BATTERY_INVERTER);
 		this.<Long>addCopyListener(batteryInverter,
-				BatteryInverterTimeoutFailure.ChannelId.TIMEOUT_STOP_BATTERY_INVERTER,
-				EssTimeoutFailure.ChannelId.TIMEOUT_STOP_BATTERY_INVERTER);
+				BatteryInverterErrorAcknowledge.ChannelId.TIMEOUT_STOP_BATTERY_INVERTER,
+				EssErrorAcknowledge.ChannelId.TIMEOUT_STOP_BATTERY_INVERTER);
 
 		this.<Long>addCopyListener(batteryInverter,
 				SymmetricBatteryInverter.ChannelId.ACTIVE_CHARGE_ENERGY,
@@ -108,13 +123,22 @@ public class ChannelManager extends AbstractChannelListenerManager {
 		}
 	}
 
-	private void addBatteryListener(Battery battery) {
+	private void addBatteryListener(ClockProvider clock, Battery battery, SymmetricBatteryInverter batteryInverter) {
 		this.<Long>addCopyListener(battery,
-				BatteryTimeoutFailure.ChannelId.TIMEOUT_START_BATTERY,
-				EssTimeoutFailure.ChannelId.TIMEOUT_START_BATTERY);
+				BatteryErrorAcknowledge.ChannelId.TIMEOUT_START_BATTERY,
+				EssErrorAcknowledge.ChannelId.TIMEOUT_START_BATTERY);
 		this.<Long>addCopyListener(battery,
-				BatteryTimeoutFailure.ChannelId.TIMEOUT_STOP_BATTERY,
-				EssTimeoutFailure.ChannelId.TIMEOUT_STOP_BATTERY);
+				BatteryErrorAcknowledge.ChannelId.TIMEOUT_STOP_BATTERY,
+				EssErrorAcknowledge.ChannelId.TIMEOUT_STOP_BATTERY);
+
+		this.addOnSetNextValueListener(battery, Battery.ChannelId.DISCHARGE_MIN_VOLTAGE,
+				ignored -> this.powerHandler.accept(clock, battery, batteryInverter));
+		this.addOnSetNextValueListener(battery, Battery.ChannelId.DISCHARGE_MAX_CURRENT,
+				ignored -> this.powerHandler.accept(clock, battery, batteryInverter));
+		this.addOnSetNextValueListener(battery, Battery.ChannelId.CHARGE_MAX_VOLTAGE,
+				ignored -> this.powerHandler.accept(clock, battery, batteryInverter));
+		this.addOnSetNextValueListener(battery, Battery.ChannelId.CHARGE_MAX_CURRENT,
+				ignored -> this.powerHandler.accept(clock, battery, batteryInverter));
 
 		this.addCopyListener(battery,
 				Battery.ChannelId.CAPACITY,

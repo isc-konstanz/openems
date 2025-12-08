@@ -23,7 +23,6 @@ import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.modbusslave.ModbusSlaveNatureTable;
 import io.openems.edge.common.modbusslave.ModbusSlaveTable;
-import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.ess.dccharger.api.EssDcCharger;
 import io.openems.edge.rct.cess.RctCess;
 import io.openems.edge.timedata.api.Timedata;
@@ -51,11 +50,12 @@ public class RctCessDcChargerImpl extends AbstractOpenemsComponent implements Rc
 	@Reference(policy = ReferencePolicy.DYNAMIC, policyOption = ReferencePolicyOption.GREEDY, cardinality = ReferenceCardinality.OPTIONAL)
 	private volatile Timedata timedata = null;
 
-	private volatile RctCess ess = null;
+	protected volatile RctCess ess = null;
 
 	@Override
 	public void bindEss(RctCess ess) {
 		this.ess = ess;
+		RctCessDcCharger.calculateActualPowerFromBindings(this, ess);
 	}
 
 	@Override
@@ -86,42 +86,16 @@ public class RctCessDcChargerImpl extends AbstractOpenemsComponent implements Rc
 	public void handleEvent(Event event) {
 		switch (event.getTopic()) {
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
-			this.calculatePower();
 			this.calculateEnergy();
 			break;
 		}
-	}
-
-	private void calculatePower() {
-		if (this.ess == null) {
-			return;
-		}
-		var batteryInverter = this.ess.getBatteryInverter();
-		if (batteryInverter == null || !batteryInverter.getDcPower().isDefined()) {
-			return;
-		}
-		var battery = this.ess.getBattery();
-		if (battery == null || !battery.getVoltage().isDefined() || !battery.getCurrent().isDefined()) {
-			return;
-		}
-		var batteryPower = TypeUtils.multiply(battery.getVoltage().get(), battery.getCurrent().get());
-
-		var dcPower = batteryInverter.getDcPower().get();
-		var pvPower = Math.max(TypeUtils.subtract(dcPower, batteryPower), 0);
-		this._setActualPower(pvPower);
-
-		var dcVoltage = batteryInverter.getDcVoltage().get();
-		this._setVoltage(dcVoltage);
-
-		var pvCurrent = TypeUtils.divide(pvPower, dcVoltage / 1000);
-		this._setCurrent(pvCurrent);
 	}
 
 	/**
 	 * Calculate the Energy values from ActualPower.
 	 */
 	private void calculateEnergy() {
-		var actualPower = this.getActualPowerChannel().getNextValue().get();
+		var actualPower = this.getActualPower().get();
 		if (actualPower == null) {
 			// Not available
 			this.calculateActualEnergy.update(null);

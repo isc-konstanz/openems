@@ -1,11 +1,14 @@
 package io.openems.edge.rct.cess.battery;
 
+import java.util.function.Consumer;
+
 import io.openems.common.channel.Level;
 import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
 import io.openems.common.types.OpenemsType;
 import io.openems.edge.battery.api.Battery;
-import io.openems.edge.battery.api.BatteryTimeoutFailure;
+import io.openems.edge.battery.api.BatteryErrorAcknowledge;
+import io.openems.edge.battery.protection.BatteryVoltageProtection;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.common.channel.Channel;
 import io.openems.edge.common.channel.Doc;
@@ -14,12 +17,13 @@ import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStoppable;
+import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.rct.cess.battery.enums.PreChargeState;
 import io.openems.edge.rct.cess.battery.enums.RackChargeState;
 import io.openems.edge.rct.cess.battery.enums.RunState;
 import io.openems.edge.rct.cess.battery.statemachine.StateMachine.State;
 
-public interface RctCessBattery extends Battery, BatteryTimeoutFailure,
+public interface RctCessBattery extends Battery, BatteryVoltageProtection, BatteryErrorAcknowledge,
 		OpenemsComponent, ModbusComponent, StartStoppable {
 
 	/**
@@ -510,6 +514,19 @@ public interface RctCessBattery extends Battery, BatteryTimeoutFailure,
 	 */
 	public default Value<Integer> getSwitchBoxTemperature() {
 		return this.getSwitchBoxTemperatureChannel().value();
+	}
+
+	public static void calculatePowerFromVoltageAndCurrent(RctCessBattery battery) {
+		final Consumer<Value<Integer>> calculate = ignore -> {
+			var voltage = battery.getVoltage().get();
+			var current = battery.getCurrent().get();
+			if (current == null || voltage == null) {
+				return;
+			}
+			battery._setPower(TypeUtils.multiply(voltage, current));
+		};
+		battery.getVoltageChannel().onSetNextValue(calculate);
+		battery.getVoltageChannel().onSetNextValue(calculate);
 	}
 
 }

@@ -22,7 +22,7 @@ import io.openems.edge.common.jsonapi.ComponentJsonApi;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStoppable;
-import io.openems.edge.ess.api.EssTimeoutFailure;
+import io.openems.edge.ess.api.EssErrorAcknowledge;
 import io.openems.edge.ess.api.HybridEss;
 import io.openems.edge.ess.api.ManagedSymmetricEss;
 import io.openems.edge.ess.api.SymmetricEss;
@@ -33,7 +33,7 @@ import io.openems.edge.rct.cess.charger.RctCessDcCharger;
 import io.openems.edge.rct.cess.statemachine.StateMachine.State;
 import io.openems.edge.timedata.api.TimedataProvider;
 
-public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss, EssTimeoutFailure,
+public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss, EssErrorAcknowledge,
 		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, ComponentJsonApi,
 		CycleProvider, TimedataProvider, EventHandler, StartStoppable {
 
@@ -41,7 +41,15 @@ public interface RctCess extends HybridEss, ManagedSymmetricEss, SymmetricEss, E
 	 * Efficiency factor to calculate AC Charge/Discharge limits from DC. Used at
 	 * {@link ChannelManager}.
 	 */
-	public static double EFFICIENCY_FACTOR = 0.95;
+	public static final float EFFICIENCY_FACTOR = 0.95F;
+
+	/**
+	 * Allow a maximum power increase per second.
+	 *
+	 * <p>
+	 * 5 % of possible allowed charge/discharge power
+	 */
+	public static final float MAX_POWER_INCREASE_PERCENTAGE = 0.05F;
 
 	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
 

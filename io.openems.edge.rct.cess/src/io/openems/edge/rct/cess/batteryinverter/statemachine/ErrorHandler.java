@@ -18,7 +18,7 @@ public class ErrorHandler extends StateHandler<State, Context> {
 	protected void onExit(Context context) throws OpenemsNamedException {
 		final var inverter = context.getParent();
 
-		inverter.clearBatteryInverterTimeoutFailure();
+		inverter.executeBatteryInverterErrorAcknowledge();
 	}
 
 	@Override

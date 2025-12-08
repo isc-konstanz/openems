@@ -57,7 +57,7 @@ import io.openems.edge.common.modbusslave.ModbusSlaveTable;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStoppable;
 import io.openems.edge.common.type.TypeUtils;
-import io.openems.edge.ess.api.EssTimeoutFailure;
+import io.openems.edge.ess.api.EssErrorAcknowledge;
 import io.openems.edge.ess.api.HybridEss;
 import io.openems.edge.ess.api.ManagedSymmetricEss;
 import io.openems.edge.ess.api.SymmetricEss;
@@ -84,7 +84,7 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE,
 })
 public class RctCessImpl extends AbstractOpenemsModbusComponent implements
-		RctCess, HybridEss, ManagedSymmetricEss, SymmetricEss, EssTimeoutFailure,
+		RctCess, HybridEss, ManagedSymmetricEss, SymmetricEss, EssErrorAcknowledge,
 		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, ComponentJsonApi,
 		CycleProvider, TimedataProvider, EventHandler, StartStoppable {
 
@@ -122,18 +122,8 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 	@Reference(policy = ReferencePolicy.STATIC, policyOption = ReferencePolicyOption.GREEDY, cardinality = ReferenceCardinality.MANDATORY)
 	private RctCessBatteryInverter batteryInverter;
 
-	private List<RctCessDcCharger> chargers = new LinkedList<RctCessDcCharger>();
-
 	@Reference(policy = ReferencePolicy.STATIC, policyOption = ReferencePolicyOption.GREEDY, cardinality = ReferenceCardinality.MULTIPLE)
-	protected void bindDcCharger(RctCessDcCharger charger) {
-		charger.bindEss(this);
-		chargers.add(charger);
-	}
-
-	protected void unbindDcCharger(RctCessDcCharger charger) {
-		charger.unbindEss();
-		chargers.remove(charger);
-	}
+	private List<RctCessDcCharger> chargers = new LinkedList<RctCessDcCharger>();
 
 	@Override
 	@Reference(policy = ReferencePolicy.STATIC, policyOption = ReferencePolicyOption.GREEDY, cardinality = ReferenceCardinality.MANDATORY)
@@ -147,7 +137,7 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 				ModbusComponent.ChannelId.values(),
 				StartStoppable.ChannelId.values(),
 				ElectricityNode.ChannelId.values(),
-				EssTimeoutFailure.ChannelId.values(),
+				EssErrorAcknowledge.ChannelId.values(),
 				SymmetricEss.ChannelId.values(),
 				ManagedSymmetricEss.ChannelId.values(),
 				HybridEss.ChannelId.values(),
@@ -177,8 +167,9 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 		if (OpenemsComponent.updateReferenceFilter(this.cm, this.servicePid(), "charger", config.charger_ids())) {
 			return;
 		}
+		this.chargers.stream().forEach(charger -> charger.bindEss(this));
 
-		this.getChannelManager().activate(this.getBattery(), this.getBatteryInverter());
+		this.getChannelManager().activate(this.getComponentManager(), this.getBattery(), this.getBatteryInverter());
 	}
 
 	@Override
@@ -189,10 +180,10 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 	}
 
 	@Override
-	public void clearEssTimeoutFailure() {
+	public void executeErrorAcknowledge() {
 		try {
-			this.battery.clearBatteryTimeoutFailure();
-			this.batteryInverter.clearBatteryInverterTimeoutFailure();
+			this.battery.executeBatteryErrorAcknowledge();
+			this.batteryInverter.executeBatteryInverterErrorAcknowledge();
 
 			this.stateMachine.forceNextState(UNDEFINED);
 
@@ -206,7 +197,7 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 		builder.handleRequest(new ClearTimeoutFailure(), endpoint -> {
 			endpoint.setGuards(EdgeGuards.roleIsAtleast(Role.ADMIN));
 		}, call -> {
-			this.clearEssTimeoutFailure();
+			this.executeErrorAcknowledge();
 			return EmptyObject.INSTANCE;
 		});
 	}
@@ -260,7 +251,7 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 		if (this.hasDcChargers()) {
 			var pvPower = 0;
 			for (RctCessDcCharger charger : this.getDcChargers()) {
-				pvPower += charger.getActualPowerChannel().getNextValue().orElse(0);
+				pvPower += charger.getActualPower().orElse(0);
 			}
 			this._setPvPower(pvPower);
 			
@@ -444,7 +435,7 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 	public String debugLog() {
 		var builder = new StringBuilder(this.stateMachine.debugLog());
 
-		builder.append("|SoC:").append(this.getSoc().asString()) //
+		builder.append("|SoC:").append(this.getSoc().asString())
 				.append("|L:").append(this.getActivePower().asString());
 
 		// For HybridEss show PV production power and actual Battery charge power
@@ -455,11 +446,11 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 
 		// Show max AC export/import active power:
 		// Minimum of MaxAllowedCharge/DischargePower and MaxApparentPower
-		builder.append("|Allowed:") //
-				.append(TypeUtils.max(//
+		builder.append("|Allowed:")
+				.append(TypeUtils.max(
 						this.getAllowedChargePower().get(), TypeUtils.multiply(this.getMaxApparentPower().get(), -1)))
-				.append(";") //
-				.append(TypeUtils.min(//
+				.append(";")
+				.append(TypeUtils.min(
 						this.getAllowedDischargePower().get(), this.getMaxApparentPower().get()));
 
 		builder.append("|").append(this.getGridModeChannel().value().asOptionString());

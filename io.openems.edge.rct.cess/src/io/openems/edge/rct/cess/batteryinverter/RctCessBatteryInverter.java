@@ -6,7 +6,7 @@ import io.openems.common.channel.Level;
 import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
 import io.openems.common.types.OpenemsType;
-import io.openems.edge.batteryinverter.api.BatteryInverterTimeoutFailure;
+import io.openems.edge.batteryinverter.api.BatteryInverterErrorAcknowledge;
 import io.openems.edge.batteryinverter.api.ManagedSymmetricBatteryInverter;
 import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
@@ -24,7 +24,7 @@ import io.openems.edge.rct.cess.batteryinverter.statemachine.StateMachine.State;
 import io.openems.edge.timedata.api.TimedataProvider;
 
 public interface RctCessBatteryInverter extends 
-		ManagedSymmetricBatteryInverter, SymmetricBatteryInverter, BatteryInverterTimeoutFailure,
+		ManagedSymmetricBatteryInverter, SymmetricBatteryInverter, BatteryInverterErrorAcknowledge,
 		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave,
 		TimedataProvider, EventHandler, StartStoppable {
 
@@ -436,6 +436,25 @@ public interface RctCessBatteryInverter extends
 	 */
 	public default Value<Integer> getIgbtTemperature() {
 		return this.getIgbtTemperatureChannel().value();
+	}
+
+	public static void calculatePhaseVoltages(RctCessBatteryInverter inverter) {
+		inverter.getVoltageL1L2Channel().onSetNextValue(value -> {
+			inverter._setVoltageL1(calculatePhaseVoltage(value.get()));
+		});
+		inverter.getVoltageL2L3Channel().onSetNextValue(value -> {
+			inverter._setVoltageL2(calculatePhaseVoltage(value.get()));
+		});
+		inverter.getVoltageL3L1Channel().onSetNextValue(value -> {
+			inverter._setVoltageL3(calculatePhaseVoltage(value.get()));
+		});
+	}
+
+	private static Integer calculatePhaseVoltage(Integer phaseToPhaseVoltage) {
+		if (phaseToPhaseVoltage == null) {
+			return null;
+		}
+		return (int) Math.round(phaseToPhaseVoltage / Math.sqrt(3));
 	}
 
 }

@@ -17,9 +17,6 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
 import org.osgi.service.component.annotations.ReferencePolicyOption;
-import org.osgi.service.event.Event;
-import org.osgi.service.event.EventHandler;
-import org.osgi.service.event.propertytypes.EventTopics;
 import org.osgi.service.metatype.annotations.Designate;
 
 import io.openems.common.channel.AccessMode;
@@ -38,7 +35,6 @@ import io.openems.edge.bridge.modbus.api.element.UnsignedDoublewordElement;
 import io.openems.edge.bridge.modbus.api.element.UnsignedWordElement;
 import io.openems.edge.bridge.modbus.api.task.FC3ReadRegistersTask;
 import io.openems.edge.common.component.OpenemsComponent;
-import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.modbusslave.ModbusSlaveTable;
 import io.openems.edge.common.taskmanager.Priority;
@@ -51,11 +47,8 @@ import io.openems.edge.meter.api.ElectricityMeter;
 		immediate = true,
 		configurationPolicy = ConfigurationPolicy.REQUIRE
 )
-@EventTopics({
-	EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE
-})
 public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements RctCessMeter,
-		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave, EventHandler {
+		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave {
 
 	private MeterType meterType = MeterType.CONSUMPTION_METERED;
 	private boolean invert;
@@ -76,7 +69,8 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 				ElectricityMeter.ChannelId.values(),
 				RctCessMeter.ChannelId.values()
 		);
-		ElectricityMeter.calculateAverageVoltageFromPhases(this);
+		RctCessMeter.calculatePhasePowerFactorsFromHarmonics(this);
+		RctCessMeter.calculatePhasePowersFromVoltageAndCurrent(this);
 	}
 
 	@Activate
@@ -98,101 +92,6 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 	@Override
 	public MeterType getMeterType() {
 		return this.meterType;
-	}
-
-	@Override
-	public void handleEvent(Event event) {
-		if (!this.isEnabled()) {
-			return;
-		}
-		if (event.getTopic() == EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE) {
-			this.calculatePhasePowerFactors();
-			this.calculatePhasePowers();
-		}
-	}
-
-	private void calculatePhasePowerFactors() {
-		if (!this.getPowerFactor().isDefined()) {
-			return;
-		}
-		var powerFactor = this.getPowerFactor().get();
-
-		if (this.getCurrentHarmonicDistortionL1().isDefined()) {
-			this._setPowerFactorL1(_calculatePhasePowerFactor(this.getCurrentHarmonicDistortionL1().get(), powerFactor));
-		}
-		if (this.getCurrentHarmonicDistortionL2().isDefined()) {
-			this._setPowerFactorL2(_calculatePhasePowerFactor(this.getCurrentHarmonicDistortionL2().get(), powerFactor));
-		}
-		if (this.getCurrentHarmonicDistortionL3().isDefined()) {
-			this._setPowerFactorL3(_calculatePhasePowerFactor(this.getCurrentHarmonicDistortionL3().get(), powerFactor));
-		}
-	}
-
-	private Float _calculatePhasePowerFactor(float totalHarmonicDistortion, float totalPowerFactor) {
-		return Math.min((float) (totalPowerFactor * Math.sqrt(1 + Math.pow(totalHarmonicDistortion / 100., 2))), 1f);
-	}
-
-	private void calculatePhasePowers() {
-		if (this.getPowerFactorL1Channel().getNextValue().isDefined()) {
-			this._calculatePhasePowers(1, this.getPowerFactorL1Channel().getNextValue().get());
-		}
-		if (this.getPowerFactorL2Channel().getNextValue().isDefined()) {
-			this._calculatePhasePowers(2, this.getPowerFactorL2Channel().getNextValue().get());
-		}
-		if (this.getPowerFactorL3Channel().getNextValue().isDefined()) {
-			this._calculatePhasePowers(3, this.getPowerFactorL3Channel().getNextValue().get());
-		}
-	}
-
-	private void _calculatePhasePowers(int phase, float powerFactor) {
-		Integer apparentPower = this._calculateApparentPhasePower(phase);
-		if (apparentPower == null) {
-			return;
-		}
-		double phi = Math.acos(powerFactor);
-
-		int activePower = (int) (apparentPower * powerFactor);
-		int reactivePower = (int) (apparentPower * Math.sin(phi));
-		switch (phase) {
-			case 1 -> {
-				this._setActivePowerL1(activePower);
-				this._setReactivePowerL1(reactivePower);
-			}
-			case 2 -> {
-				this._setActivePowerL2(activePower);
-				this._setReactivePowerL2(reactivePower);
-			}
-			case 3 -> {
-				this._setActivePowerL3(activePower);
-				this._setReactivePowerL3(reactivePower);
-			}
-		}
-	}
-
-	private Integer _calculateApparentPhasePower(int phase) {
-		Integer voltage;
-		Integer current;
-		switch (phase) {
-			case 1 -> {
-				voltage = this.getVoltageL1().get();
-				current = this.getCurrentL1().get();
-			}
-			case 2 -> {
-				voltage = this.getVoltageL2().get();
-				current = this.getCurrentL2().get();
-			}
-			case 3 -> {
-				voltage = this.getVoltageL3().get();
-				current = this.getCurrentL3().get();
-			}
-			default -> {
-				return null;
-			}
-		}
-		if (voltage == null || current == null) {
-			return null;
-		}
-		return (int) (((double) voltage / 1000.0) * ((double) current / 1000.0));
 	}
 
 	@Override

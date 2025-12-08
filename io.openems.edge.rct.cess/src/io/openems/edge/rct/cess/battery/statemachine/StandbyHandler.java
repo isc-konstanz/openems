@@ -5,7 +5,7 @@ import io.openems.edge.common.statemachine.StateHandler;
 import io.openems.edge.rct.cess.battery.enums.PreChargeState;
 import io.openems.edge.rct.cess.battery.statemachine.StateMachine.State;
 
-public class StoppedHandler extends StateHandler<State, Context> {
+public class StandbyHandler extends StateHandler<State, Context> {
 
 	@Override
 	public State runAndGetNextState(Context context) {
@@ -18,6 +18,6 @@ public class StoppedHandler extends StateHandler<State, Context> {
 		// Mark as stopped
 		battery._setStartStop(StartStop.STOP);
 
-		return State.STOPPED;
+		return State.STANDBY;
 	}
 }

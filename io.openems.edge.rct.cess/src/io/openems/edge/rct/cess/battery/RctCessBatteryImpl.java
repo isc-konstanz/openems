@@ -5,6 +5,7 @@ import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.DIRECT
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_2;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_3;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_1;
+import static io.openems.edge.rct.cess.battery.statemachine.StateMachine.State.UNDEFINED;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -28,6 +29,8 @@ import org.slf4j.LoggerFactory;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
 import io.openems.edge.battery.api.Battery;
+import io.openems.edge.battery.api.BatteryErrorAcknowledge;
+import io.openems.edge.battery.protection.BatteryVoltageProtection;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
 import io.openems.edge.bridge.modbus.api.BridgeModbus;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
@@ -42,7 +45,6 @@ import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStoppable;
 import io.openems.edge.common.taskmanager.Priority;
-import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.rct.cess.battery.statemachine.Context;
 import io.openems.edge.rct.cess.battery.statemachine.StateMachine;
 import io.openems.edge.rct.cess.battery.statemachine.StateMachine.State;
@@ -54,10 +56,10 @@ import io.openems.edge.rct.cess.battery.statemachine.StateMachine.State;
 		configurationPolicy = ConfigurationPolicy.REQUIRE
 )
 @EventTopics({
-		// EdgeEventConstants.TOPIC_CYCLE_BEFORE_PROCESS_IMAGE,
 		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE
 })
-public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implements RctCessBattery, Battery,
+public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implements 
+		RctCessBattery, Battery, BatteryErrorAcknowledge,
 		OpenemsComponent, ModbusComponent, EventHandler, StartStoppable {
 
 	private static final int NUMBER_OF_RACK_UNITS = 5;
@@ -91,6 +93,8 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 				ModbusComponent.ChannelId.values(),
 				StartStoppable.ChannelId.values(),
 				Battery.ChannelId.values(),
+				BatteryErrorAcknowledge.ChannelId.values(),
+				BatteryVoltageProtection.ChannelId.values(),
 				RctCessBattery.ChannelId.values()
 		);
 
@@ -111,6 +115,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 				"Modbus", config.modbus_id())) {
 			return;
 		}
+		RctCessBattery.calculatePowerFromVoltageAndCurrent(this);
 	}
 
 	@Override
@@ -127,8 +132,19 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 		switch (event.getTopic()) {
 			case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
 				this.handleStateMachine();
-				this.calculatePower();
 				break;
+		}
+	}
+
+	@Override
+	public void executeBatteryErrorAcknowledge() {
+		try {
+			this._setTimeoutStartBattery(false);
+			this._setTimeoutStopBattery(false);
+
+			this.stateMachine.forceNextState(UNDEFINED);
+		} catch (Exception e) {
+			this.logError(this.log, e.getClass().getSimpleName() + ": " + e.getMessage());
 		}
 	}
 
@@ -140,7 +156,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 		this._setStartStop(StartStop.UNDEFINED);
 
 		// Prepare Context
-		var context = new Context(this, this.config);
+		var context = new Context(this, this.config, this.componentManager.getClock());
 
 		// Call the StateMachine
 		try {
@@ -151,13 +167,6 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 			this._setRunFailed(true);
 			this.logError(this.log, "StateMachine failed: " + e.getMessage());
 		}
-	}
-
-	private void calculatePower() {
-		if (!this.getVoltage().isDefined() || !this.getCurrent().isDefined()) {
-			return;
-		}
-		this._setPower(TypeUtils.multiply(this.getVoltage().get(), this.getCurrent().get()));
 	}
 
 	@Override
@@ -199,7 +208,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 								.bit(6, RctCessBattery.ChannelId.CURRENT_SENSOR_FAULT)
 								.bit(7, RctCessBattery.ChannelId.INSULATION_MONITOR_FAULT)
 								.bit(8, RctCessBattery.ChannelId.DISCONNECTOR_ABNORMAL_FAULT))),
-	
+
 				new FC3ReadRegistersTask(0x0004, Priority.LOW,
 						m(new BitsWordElement(0x0004, this)
 								.bit(0, RctCessBattery.ChannelId.TOTAL_VOLTAGE_HIGH_WARNING)
@@ -252,7 +261,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 								.bit(13, RctCessBattery.ChannelId.CELL_VOLTAGE_DIFFERENCE_HIGH_CRITICAL)
 								.bit(14, RctCessBattery.ChannelId.CELL_TEMPERATURE_DIFFERENCE_HIGH_CRITICAL)
 								.bit(15, RctCessBattery.ChannelId.SOC_LOW_CRITICAL))),
-	
+
 				new FC3ReadRegistersTask(0x0008, Priority.HIGH,
 						m(Battery.ChannelId.VOLTAGE,
 								new UnsignedWordElement(0x0008), SCALE_FACTOR_MINUS_1),
@@ -290,7 +299,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 								new SignedWordElement(0x0018), DIRECT_1_TO_1),
 						m(Battery.ChannelId.MIN_CELL_TEMPERATURE,
 								new UnsignedWordElement(0x0019), SCALE_FACTOR_MINUS_1)),
-	
+
 				new FC3ReadRegistersTask(0x001A, Priority.LOW,
 						m(RctCessBattery.ChannelId.MEAN_CELL_VOLTAGE,
 								new UnsignedWordElement(0x001A), DIRECT_1_TO_1),

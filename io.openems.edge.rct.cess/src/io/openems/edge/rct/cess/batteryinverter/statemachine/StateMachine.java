@@ -6,17 +6,17 @@ import io.openems.edge.common.statemachine.StateHandler;
 
 public class StateMachine extends AbstractStateMachine<StateMachine.State, Context> {
 
-	public static final long RETRY_COMMAND_SECONDS = 30;
-	public static final int RETRY_COMMAND_MAX_ATTEMPTS = 30;
+	public static final int WAIT_IN_UNDEFINED_STATE_SECONDS = 60;
+	public static final int WAIT_IN_ERROR_STATE_SECONDS = 120;
 
 	public enum State implements io.openems.edge.common.statemachine.State<State>, OptionsEnum {
 		UNDEFINED(-1),
 
-		GO_RUNNING(10),
+		STARTING(10),
 		RUNNING(11),
 
-		GO_STOPPED(20),
-		STOPPED(21),
+		STOPPING(20),
+		STANDBY(21),
 
 		ERROR(30),
 		;
@@ -56,10 +56,10 @@ public class StateMachine extends AbstractStateMachine<StateMachine.State, Conte
 	public StateHandler<State, Context> getStateHandler(State state) {
 		return switch (state) {
 		case UNDEFINED -> new UndefinedHandler();
-		case GO_RUNNING -> new GoRunningHandler();
+		case STARTING -> new StartingHandler();
 		case RUNNING -> new RunningHandler();
-		case GO_STOPPED -> new GoStoppedHandler();
-		case STOPPED -> new StoppedHandler();
+		case STOPPING -> new StoppingHandler();
+		case STANDBY -> new StandbyHandler();
 		case ERROR -> new ErrorHandler();
 		};
 	}

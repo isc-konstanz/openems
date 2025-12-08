@@ -6,6 +6,7 @@ import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_1;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.chain;
 import static io.openems.edge.common.sum.GridMode.ON_GRID;
+import static io.openems.edge.rct.cess.batteryinverter.statemachine.StateMachine.State.UNDEFINED;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -30,6 +31,7 @@ import io.openems.common.channel.AccessMode;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
 import io.openems.edge.battery.api.Battery;
+import io.openems.edge.batteryinverter.api.BatteryInverterErrorAcknowledge;
 import io.openems.edge.batteryinverter.api.ManagedSymmetricBatteryInverter;
 import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
@@ -67,9 +69,9 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 @EventTopics({
 	EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE,
 })
-public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent implements RctCessBatteryInverter, 
-		ManagedSymmetricBatteryInverter, SymmetricBatteryInverter, ElectricityNode,
-		OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
+public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent implements
+		RctCessBatteryInverter, ManagedSymmetricBatteryInverter, SymmetricBatteryInverter, BatteryInverterErrorAcknowledge,
+		ElectricityNode, OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
 
 	private final Logger log = LoggerFactory.getLogger(RctCessBatteryInverterImpl.class);
 	private final StateMachine stateMachine = new StateMachine(State.UNDEFINED);
@@ -103,6 +105,7 @@ public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent i
 				ModbusComponent.ChannelId.values(),
 				StartStoppable.ChannelId.values(),
 				ElectricityNode.ChannelId.values(),
+				BatteryInverterErrorAcknowledge.ChannelId.values(),
 				SymmetricBatteryInverter.ChannelId.values(),
 				ManagedSymmetricBatteryInverter.ChannelId.values(),
 				RctCessBatteryInverter.ChannelId.values());
@@ -119,12 +122,30 @@ public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent i
 				"Modbus", config.modbus_id())) {
 			return;
 		}
+
+		// Calculate the Phase Voltages from Phase to Phase Voltages
+		RctCessBatteryInverter.calculatePhaseVoltages(this);
+
+		// Calculate the Phase Powers from Voltage, Current and Power Factor
+		ElectricityNode.calculatePhasePowersFromVoltageAndCurrent(this);
 	}
 
 	@Override
 	@Deactivate
 	protected void deactivate() {
 		super.deactivate();
+	}
+
+	@Override
+	public void executeBatteryInverterErrorAcknowledge() {
+		try {
+			this._setTimeoutStartBatteryInverter(false);
+			this._setTimeoutStopBatteryInverter(false);
+
+			this.stateMachine.forceNextState(UNDEFINED);
+		} catch (Exception e) {
+			this.logError(this.log, e.getClass().getSimpleName() + ": " + e.getMessage());
+		}
 	}
 
 	@Override
@@ -138,7 +159,8 @@ public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent i
 		// TODO Set battery limits and other business logic
 
 		// Prepare Context
-		var context = new Context(this, this.config, battery, setActivePower, setReactivePower);
+		var context = new Context(this, this.config, this.componentManager.getClock(),
+				battery, setActivePower, setReactivePower);
 
 		// Call the StateMachine
 		try {
@@ -156,105 +178,9 @@ public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent i
 		switch (event.getTopic()) {
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
 
-			// Calculate the Phase Voltages from Phase to Phase Voltages
-			this.calculateAcPhaseVoltages();
-
-			// Calculate the Phase Powers from Voltage, Current and Power Factor
-			this.calculateAcPhasePowers();
-
-			// Calculate the Energy values from DC and AC Power.
+			// Calculate the Energy values from AC Power.
 			this.calculateAcEnergy();
 			break;
-		}
-	}
-
-	private void calculateAcPhaseVoltages() {
-		if (this.getVoltageL1L2().isDefined()) {
-			this._calculateAcPhaseVoltage(1, this.getVoltageL1L2().get());
-		}
-		if (this.getVoltageL2L3().isDefined()) {
-			this._calculateAcPhaseVoltage(2, this.getVoltageL2L3().get());
-		}
-		if (this.getVoltageL3L1().isDefined()) {
-			this._calculateAcPhaseVoltage(3, this.getVoltageL3L1().get());
-		}
-	}
-
-	private void _calculateAcPhaseVoltage(int phase, int phaseToPhaseVoltage) {
-		var voltage = (int) Math.round(phaseToPhaseVoltage / Math.sqrt(3));
-		switch (phase) {
-			case 1 -> {
-				this._setVoltageL1(voltage);
-			}
-			case 2 -> {
-				this._setVoltageL2(voltage);
-			}
-			case 3 -> {
-				this._setVoltageL3(voltage);
-			}
-		}
-	}
-
-	private void calculateAcPhasePowers() {
-		if (!this.getPowerFactor().isDefined()) {
-			return;
-		}
-		// FIXME: Validate and implement a way to have per-phase Power Factor
-		var powerFactor = this.getPowerFactor().get();
-
-		this._calculateAcPhasePowers(1, powerFactor);
-		this._calculateAcPhasePowers(2, powerFactor);
-		this._calculateAcPhasePowers(3, powerFactor);
-	}
-
-	private Integer _calculateApparentPhasePower(int phase) {
-		Integer voltage;
-		Integer current;
-		switch (phase) {
-			case 1 -> {
-				voltage = this.getVoltageL1Channel().getNextValue().get();
-				current = this.getCurrentL1().get();
-			}
-			case 2 -> {
-				voltage = this.getVoltageL2Channel().getNextValue().get();
-				current = this.getCurrentL2().get();
-			}
-			case 3 -> {
-				voltage = this.getVoltageL3Channel().getNextValue().get();
-				current = this.getCurrentL3().get();
-			}
-			default -> {
-				return null;
-			}
-		}
-		if (voltage == null || current == null) {
-			return null;
-		}
-		return (int) (((double) voltage / 1000.0) * ((double) current / 1000.0));
-	}
-
-	private void _calculateAcPhasePowers(int phase, float powerFactor) {
-		Integer apparentPower = this._calculateApparentPhasePower(phase);
-		if (apparentPower == null) {
-			return;
-		}
-		double phi = Math.acos(powerFactor);
-
-		int activePower = (int) (apparentPower * powerFactor);
-		int reactivePower = (int) (apparentPower * Math.sin(phi));
-		switch (phase) {
-			case 1 -> {
-				this._setActivePowerL1(activePower);
-				this._setReactivePowerL1(reactivePower);
-			}
-			case 2 -> {
-				this._setActivePowerL2(activePower);
-				this._setReactivePowerL2(reactivePower);
-			}
-			case 3 -> {
-				this._setActivePowerL3(activePower);
-				this._setReactivePowerL3(reactivePower);
-			}
 		}
 	}
 
@@ -347,7 +273,13 @@ public class RctCessBatteryInverterImpl extends AbstractOpenemsModbusComponent i
 								new SignedWordElement(0x000A), SCALE_FACTOR_2),
 						m(ElectricityNode.ChannelId.POWER_FACTOR,
 								new UnsignedWordElement(0x000B),
-								chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_1))),
+                                chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_1)),
+                        m(RctCessBatteryInverter.ChannelId.DC_VOLTAGE,
+                                new UnsignedWordElement(0x000C), SCALE_FACTOR_2),
+                        m(RctCessBatteryInverter.ChannelId.DC_CURRENT,
+                                new SignedWordElement(0x000D), SCALE_FACTOR_2),
+                        m(RctCessBatteryInverter.ChannelId.DC_POWER,
+                                new SignedWordElement(0x000E), SCALE_FACTOR_2)),
 
 				new FC3ReadRegistersTask(0x000F, Priority.LOW,
 						m(RctCessBatteryInverter.ChannelId.IGBT_TEMPERATURE,

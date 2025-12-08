@@ -15,7 +15,7 @@ public class StopBatteryHandler extends StateHandler<State, Context> {
 		}
 
 		if (battery.isStopped()) {
-			return State.STOPPED;
+			return State.STANDBY;
 		}
 
 		battery.stop();

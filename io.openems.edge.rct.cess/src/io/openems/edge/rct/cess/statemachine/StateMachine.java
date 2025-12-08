@@ -13,11 +13,12 @@ public class StateMachine extends AbstractStateMachine<StateMachine.State, Conte
 
 		START_BATTERY(10),
 		START_BATTERY_INVERTER(11),
-		STARTED(12),
+
+		RUNNING(12),
 
 		STOP_BATTERY_INVERTER(20),
 		STOP_BATTERY(21),
-		STOPPED(22),
+		STANDBY(22),
 
 		ERROR(30),
 		;
@@ -59,10 +60,10 @@ public class StateMachine extends AbstractStateMachine<StateMachine.State, Conte
 		case UNDEFINED -> new UndefinedHandler();
 		case START_BATTERY -> new StartBatteryHandler();
 		case START_BATTERY_INVERTER -> new StartBatteryInverterHandler();
-		case STARTED -> new StartedHandler();
+		case RUNNING -> new RunningHandler();
 		case STOP_BATTERY_INVERTER -> new StopBatteryInverterHandler();
 		case STOP_BATTERY -> new StopBatteryHandler();
-		case STOPPED -> new StoppedHandler();
+		case STANDBY -> new StandbyHandler();
 		case ERROR -> new ErrorHandler();
 		};
 	}

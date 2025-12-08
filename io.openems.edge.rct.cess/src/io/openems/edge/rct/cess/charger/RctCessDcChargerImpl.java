@@ -17,14 +17,12 @@ import org.osgi.service.metatype.annotations.Designate;
 
 import io.openems.common.channel.AccessMode;
 import io.openems.common.exceptions.OpenemsException;
-import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.common.component.AbstractOpenemsComponent;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.modbusslave.ModbusSlaveNatureTable;
 import io.openems.edge.common.modbusslave.ModbusSlaveTable;
-import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.ess.dccharger.api.EssDcCharger;
 import io.openems.edge.rct.cess.RctCess;
 import io.openems.edge.timedata.api.Timedata;
@@ -52,11 +50,12 @@ public class RctCessDcChargerImpl extends AbstractOpenemsComponent implements Rc
 	@Reference(policy = ReferencePolicy.DYNAMIC, policyOption = ReferencePolicyOption.GREEDY, cardinality = ReferenceCardinality.OPTIONAL)
 	private volatile Timedata timedata = null;
 
-	private volatile RctCess ess = null;
+	protected volatile RctCess ess = null;
 
 	@Override
 	public void bindEss(RctCess ess) {
 		this.ess = ess;
+		RctCessDcCharger.calculateActualPowerFromBindings(this, ess);
 	}
 
 	@Override
@@ -67,7 +66,6 @@ public class RctCessDcChargerImpl extends AbstractOpenemsComponent implements Rc
 	public RctCessDcChargerImpl() {
 		super(
 				OpenemsComponent.ChannelId.values(),
-				ModbusComponent.ChannelId.values(),
 				EssDcCharger.ChannelId.values(),
 				RctCessDcCharger.ChannelId.values()
 		);
@@ -88,33 +86,9 @@ public class RctCessDcChargerImpl extends AbstractOpenemsComponent implements Rc
 	public void handleEvent(Event event) {
 		switch (event.getTopic()) {
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
-			this.calculatePower();
 			this.calculateEnergy();
 			break;
 		}
-	}
-
-	private void calculatePower() {
-		if (this.ess == null) {
-			return;
-		}
-		var inverter = this.ess.getBatteryInverter();
-		if (inverter == null || !inverter.getDcPower().isDefined()) {
-			return;
-		}
-		var battery = this.ess.getBattery();
-		if (battery == null || !battery.getPower().isDefined() || !battery.getCurrent().isDefined()) {
-			return;
-		}
-		var batteryPower = TypeUtils.multiply(this.getVoltage().get(), this.getCurrent().get());
-
-		var dcPower = inverter.getDcPower().get();
-		var pvPower = Math.max(TypeUtils.subtract(dcPower, batteryPower), 0);
-		var pvRatio = pvPower / dcPower;
-
-		this._setActualPower(pvPower);
-		this._setCurrent(TypeUtils.multiply(inverter.getDcCurrent().get(), 1000, pvRatio));
-		this._setVoltage(TypeUtils.multiply(inverter.getDcVoltage().get(), 1000));
 	}
 
 	/**

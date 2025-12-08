@@ -1,5 +1,9 @@
 package io.openems.edge.rct.cess.charger;
 
+import static io.openems.edge.common.type.TypeUtils.divide;
+import static io.openems.edge.common.type.TypeUtils.subtract;
+import static io.openems.edge.common.type.TypeUtils.max;
+
 import java.util.function.Consumer;
 
 import org.osgi.service.event.EventHandler;
@@ -8,7 +12,6 @@ import io.openems.edge.common.channel.Doc;
 import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.modbusslave.ModbusSlave;
-import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.ess.dccharger.api.EssDcCharger;
 import io.openems.edge.rct.cess.RctCess;
 import io.openems.edge.timedata.api.TimedataProvider;
@@ -51,7 +54,7 @@ public interface RctCessDcCharger extends
 			if (batteryPower == null || dcPower == null) {
 				return;
 			}
-			charger._setActualPower(TypeUtils.max(TypeUtils.subtract(dcPower, batteryPower), 0));
+			charger._setActualPower(max(subtract(dcPower, batteryPower), 0));
 		};
 		battery.getPowerChannel().onSetNextValue(calculatePower);
 		batteryInverter.getDcPowerChannel().onSetNextValue(calculatePower);
@@ -63,7 +66,7 @@ public interface RctCessDcCharger extends
 				return;
 			}
 			charger._setVoltage(voltage);
-			charger._setCurrent(TypeUtils.divide(power, TypeUtils.divide(voltage, 1000)));
+			charger._setCurrent(divide(power, divide(voltage, 1000)));
 		};
 		charger.getActualPowerChannel().onSetNextValue(calculateVoltageAndCurrent);
 		batteryInverter.getDcVoltageChannel().onSetNextValue(calculateVoltageAndCurrent);

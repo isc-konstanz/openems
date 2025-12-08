@@ -1,5 +1,8 @@
 package io.openems.edge.rct.cess.battery;
 
+import static io.openems.edge.common.type.TypeUtils.divide;
+import static io.openems.edge.common.type.TypeUtils.multiply;
+
 import java.util.function.Consumer;
 
 import io.openems.common.channel.Level;
@@ -16,7 +19,6 @@ import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.startstop.StartStoppable;
-import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.rct.cess.battery.enums.PreChargeState;
 import io.openems.edge.rct.cess.battery.enums.RackChargeState;
 import io.openems.edge.rct.cess.battery.enums.RunState;
@@ -522,7 +524,11 @@ public interface RctCessBattery extends Battery, BatteryErrorAcknowledge,
 			if (current == null || voltage == null) {
 				return;
 			}
-			battery._setPower(TypeUtils.multiply(voltage, current));
+			if (current != 0) {
+				// TODO: Validate if this is a acceptable simplification for the inner resistance
+				battery._setInnerResistance(multiply(divide(voltage, current), 1000));
+			}
+			battery._setPower(multiply(voltage, current));
 		};
 		battery.getVoltageChannel().onSetNextValue(calculate);
 		battery.getVoltageChannel().onSetNextValue(calculate);

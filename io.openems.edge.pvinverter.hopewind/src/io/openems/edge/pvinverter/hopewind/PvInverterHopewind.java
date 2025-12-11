@@ -1,5 +1,7 @@
 package io.openems.edge.pvinverter.hopewind;
 
+import java.util.function.Function;
+
 import org.osgi.service.event.EventHandler;
 
 import io.openems.common.channel.AccessMode;
@@ -12,6 +14,8 @@ import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.common.channel.Channel;
 import io.openems.edge.common.channel.Doc;
 import io.openems.edge.common.channel.EnumWriteChannel;
+import io.openems.edge.common.channel.FloatReadChannel;
+import io.openems.edge.common.channel.IntegerReadChannel;
 import io.openems.edge.common.channel.IntegerWriteChannel;
 import io.openems.edge.common.channel.StateChannel;
 import io.openems.edge.common.channel.value.Value;
@@ -28,208 +32,12 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave,
 		TimedataProvider, EventHandler, StartStoppable {
 
+	public static final int ACTIVE_POWER_MAX = 66000;
+	public static final int APPARENT_POWER_MAX = (int) Math.round(ACTIVE_POWER_MAX / 0.8);
+	public static final int REACTIVE_POWER_MAX = (int) Math.round(APPARENT_POWER_MAX * Math.sin(Math.acos(0.8)));
+
+	public static final int WATCH_DOG_TIMER_DEFAULT = 60;
 	public static final int HEART_BEAT_DEFAULT = 0;
-
-	/**
-	 * Sets the Startup value. See {@link ChannelId#STARTUP}.
-	 */
-	public default void startup() throws OpenemsNamedException {
-		IntegerWriteChannel startupChannel = this.channel(ChannelId.STARTUP);
-		startupChannel.setNextWriteValue(1);
-	}
-
-	/**
-	 * Sets the Shutdown value. See {@link ChannelId#SHUTDOWN}.
-	 */
-	public default void shutdown() throws OpenemsNamedException {
-		IntegerWriteChannel shutdownChannel = this.channel(ChannelId.SHUTDOWN);
-		shutdownChannel.setNextWriteValue(1);
-	}
-
-	/**
-	 * Sets the Reset value. See {@link ChannelId#RESET}.
-	 */
-	public default void reset() throws OpenemsNamedException {
-		IntegerWriteChannel resetChannel = this.channel(ChannelId.RESET);
-		resetChannel.setNextWriteValue(1);
-	}
-
-	/**
-	 * Gets the Channel for {@link ChannelId#STATE_MACHINE}.
-	 *
-	 * @return the Channel
-	 */
-	public default Channel<State> getStateMachineChannel() {
-		return this.channel(ChannelId.STATE_MACHINE);
-	}
-
-	/**
-	 * Gets the StateMachine channel value for {@link ChannelId#STATE_MACHINE}.
-	 *
-	 * @return the Channel {@link Value}
-	 */
-	public default Value<State> getStateMachine() {
-		return this.getStateMachineChannel().value();
-	}
-
-	/**
-	 * Internal method to set the 'nextValue' on {@link ChannelId#STATE_MACHINE}
-	 * Channel.
-	 *
-	 * @param value the next value
-	 */
-	public default void _setStateMachine(State value) {
-		this.getStateMachineChannel().setNextValue(value);
-	}
-
-	/**
-	 * Gets the Channel for {@link ChannelId#RUN_FAILED}.
-	 *
-	 * @return the Channel
-	 */
-	public default Channel<Boolean> getRunFailedChannel() {
-		return this.channel(ChannelId.RUN_FAILED);
-	}
-
-	/**
-	 * Internal method to set the 'nextValue' on {@link ChannelId#RUN_FAILED}
-	 * Channel.
-	 *
-	 * @param value the next value
-	 */
-	public default void _setRunFailed(boolean value) {
-		this.getRunFailedChannel().setNextValue(value);
-	}
-
-	/**
-	 * Gets the target Start/Stop mode from config or StartStop-Channel.
-	 *
-	 * @return {@link StartStop}
-	 */
-	public StartStop getStartStopTarget();
-
-	/**
-	 * Gets the Channel for {@link ChannelId#MAX_START_ATTEMPTS}.
-	 *
-	 * @return the Channel
-	 */
-	public default StateChannel getMaxStartAttemptsChannel() {
-		return this.channel(ChannelId.MAX_START_ATTEMPTS);
-	}
-
-	/**
-	 * Gets the {@link StateChannel} for {@link ChannelId#MAX_START_ATTEMPTS}.
-	 *
-	 * @return the Channel {@link Value}
-	 */
-	public default Value<Boolean> getMaxStartAttempts() {
-		return this.getMaxStartAttemptsChannel().value();
-	}
-
-	/**
-	 * Internal method to set the 'nextValue' on
-	 * {@link ChannelId#MAX_START_ATTEMPTS} Channel.
-	 *
-	 * @param value the next value
-	 */
-	public default void _setMaxStartAttempts(Boolean value) {
-		this.getMaxStartAttemptsChannel().setNextValue(value);
-	}
-
-	/**
-	 * Gets the Channel for {@link ChannelId#MAX_STOP_ATTEMPTS}.
-	 *
-	 * @return the Channel
-	 */
-	public default StateChannel getMaxStopAttemptsChannel() {
-		return this.channel(ChannelId.MAX_STOP_ATTEMPTS);
-	}
-
-	/**
-	 * Gets the {@link StateChannel} for {@link ChannelId#MAX_STOP_ATTEMPTS}.
-	 *
-	 * @return the Channel {@link Value}
-	 */
-	public default Value<Boolean> getMaxStopAttempts() {
-		return this.getMaxStopAttemptsChannel().value();
-	}
-
-	/**
-	 * Internal method to set the 'nextValue' on {@link ChannelId#MAX_STOP_ATTEMPTS}
-	 * Channel.
-	 *
-	 * @param value the next value
-	 */
-	public default void _setMaxStopAttempts(Boolean value) {
-		this.getMaxStopAttemptsChannel().setNextValue(value);
-	}
-
-	/**
-	 * Gets the Channel for {@link ChannelId#INVERTER_STATE}.
-	 *
-	 * @return the Channel {@link Channel}
-	 */
-	public default Channel<InverterState> getInverterStateChannel() {
-		return this.channel(ChannelId.INVERTER_STATE);
-	}
-
-	/**
-	 * Gets the {@link InverterState}, see {@link ChannelId#INVERTER_STATE}.
-	 *
-	 * @return the Channel {@link Value}
-	 */
-	public default Value<InverterState> getInverterState() {
-		return this.getInverterStateChannel().value();
-	}
-
-	/**
-	 * Gets the Channel for {@link ChannelId#ACTIVE_POWER_LIMIT_MODE}.
-	 *
-	 * @return the Channel
-	 */
-	public default Channel<ActivePowerLimitMode> getActivePowerLimitModeChannel() {
-		return this.channel(ChannelId.ACTIVE_POWER_LIMIT_MODE);
-	}
-
-	/**
-	 * Gets the {@link ActivePowerLimitMode} channel value for {@link ChannelId#ACTIVE_POWER_LIMIT_MODE}.
-	 *
-	 * @return the Channel {@link Value}
-	 */
-	public default Value<ActivePowerLimitMode> getActivePowerLimitMode() {
-		return this.getActivePowerLimitModeChannel().value();
-	}
-
-	/**
-	 * Sets the  {@link ActivePowerLimitMode} value. See {@link ChannelId#ACTIVE_POWER_LIMIT_MODE}.
-	 *
-	 * @param value the {@link ActivePowerLimitMode} value
-	 * @throws OpenemsNamedException on error
-	 */
-	public default void setActivePowerLimitMode(ActivePowerLimitMode value) throws OpenemsNamedException {
-		EnumWriteChannel activePowerModeChannel = this.channel(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_MODE);
-		activePowerModeChannel.setNextWriteValue(value);
-	}
-
-	/**
-	 * Sets the HeartBeat value. See {@link ChannelId#HEART_BEAT}.
-	 *
-	 * @param value the Integer value
-	 * @throws OpenemsNamedException on error
-	 */
-	public default void setHeartBeat(Integer value) throws OpenemsNamedException {
-		IntegerWriteChannel heartBeatChannel = this.channel(ChannelId.HEART_BEAT);
-		heartBeatChannel.setNextWriteValue(value);
-	}
-
-	/**
-	 * Sets the HeartBeat value. See {@link ChannelId#HEART_BEAT}.
-	 *
-	 * @throws OpenemsNamedException on error
-	 */
-	public default void setHeartBeat() throws OpenemsNamedException {
-		this.setHeartBeat(HEART_BEAT_DEFAULT);
-	}
 
 	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
 
@@ -311,13 +119,12 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 				.accessMode(AccessMode.READ_WRITE)
 				.unit(Unit.VOLT_AMPERE_REACTIVE)
 				.persistencePriority(PersistencePriority.MEDIUM)),
-		REACTIVE_POWER_PERCENT_REGULATION(Doc.of(OpenemsType.INTEGER)
+		REACTIVE_POWER_REGULATION_PERCENT(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_WRITE)
 				.unit(Unit.PERCENT)
 				.persistencePriority(PersistencePriority.MEDIUM)),
 		REACTIVE_POWER_FACTOR_REGULATION(Doc.of(OpenemsType.FLOAT)
 				.accessMode(AccessMode.READ_WRITE)
-				.unit(Unit.PERCENT)
 				.persistencePriority(PersistencePriority.MEDIUM)),
 
 		DC_VOLTAGE_MPPT_1(Doc.of(OpenemsType.INTEGER)
@@ -336,7 +143,7 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 				.accessMode(AccessMode.READ_ONLY)
 				.unit(Unit.VOLT)
 				.persistencePriority(PersistencePriority.HIGH)),
-		
+
 		DC_CURRENT_STRING_1(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.READ_ONLY)
 				.unit(Unit.MILLIAMPERE)
@@ -494,9 +301,9 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 				.unit(Unit.VOLT_AMPERE)
 				.persistencePriority(PersistencePriority.HIGH)),
 
-		POWER_FACTOR(Doc.of(OpenemsType.INTEGER)
+		POWER_FACTOR(Doc.of(OpenemsType.FLOAT)
 				.accessMode(AccessMode.READ_ONLY)
-				.unit(Unit.PERCENT)
+				.unit(Unit.NONE)
 				.persistencePriority(PersistencePriority.HIGH)),
 
 		TEMPERATURE(Doc.of(OpenemsType.INTEGER)
@@ -567,5 +374,310 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 		public Doc doc() {
 			return this.doc;
 		}
+	}
+
+	/**
+	 * Sets the Startup value. See {@link ChannelId#STARTUP}.
+	 */
+	public default void startup() throws OpenemsNamedException {
+		IntegerWriteChannel startupChannel = this.channel(ChannelId.STARTUP);
+		startupChannel.setNextWriteValue(1);
+	}
+
+	/**
+	 * Sets the Shutdown value. See {@link ChannelId#SHUTDOWN}.
+	 */
+	public default void shutdown() throws OpenemsNamedException {
+		IntegerWriteChannel shutdownChannel = this.channel(ChannelId.SHUTDOWN);
+		shutdownChannel.setNextWriteValue(1);
+	}
+
+	/**
+	 * Sets the Reset value. See {@link ChannelId#RESET}.
+	 */
+	public default void reset() throws OpenemsNamedException {
+		IntegerWriteChannel resetChannel = this.channel(ChannelId.RESET);
+		resetChannel.setNextWriteValue(1);
+	}
+
+	/**
+	 * Gets the Channel for {@link ChannelId#STATE_MACHINE}.
+	 *
+	 * @return the Channel
+	 */
+	public default Channel<State> getStateMachineChannel() {
+		return this.channel(ChannelId.STATE_MACHINE);
+	}
+
+	/**
+	 * Gets the StateMachine channel value for {@link ChannelId#STATE_MACHINE}.
+	 *
+	 * @return the Channel {@link Value}
+	 */
+	public default Value<State> getStateMachine() {
+		return this.getStateMachineChannel().value();
+	}
+
+	/**
+	 * Internal method to set the 'nextValue' on {@link ChannelId#STATE_MACHINE}
+	 * Channel.
+	 *
+	 * @param value the next value
+	 */
+	public default void _setStateMachine(State value) {
+		this.getStateMachineChannel().setNextValue(value);
+	}
+
+	/**
+	 * Gets the Channel for {@link ChannelId#RUN_FAILED}.
+	 *
+	 * @return the Channel
+	 */
+	public default Channel<Boolean> getRunFailedChannel() {
+		return this.channel(ChannelId.RUN_FAILED);
+	}
+
+	/**
+	 * Internal method to set the 'nextValue' on {@link ChannelId#RUN_FAILED}
+	 * Channel.
+	 *
+	 * @param value the next value
+	 */
+	public default void _setRunFailed(boolean value) {
+		this.getRunFailedChannel().setNextValue(value);
+	}
+
+	/**
+	 * Gets the target Start/Stop mode from config or StartStop-Channel.
+	 *
+	 * @return {@link StartStop}
+	 */
+	public StartStop getStartStopTarget();
+
+	/**
+	 * Gets the Channel for {@link ChannelId#MAX_START_ATTEMPTS}.
+	 *
+	 * @return the Channel
+	 */
+	public default StateChannel getMaxStartAttemptsChannel() {
+		return this.channel(ChannelId.MAX_START_ATTEMPTS);
+	}
+
+	/**
+	 * Gets the {@link StateChannel} for {@link ChannelId#MAX_START_ATTEMPTS}.
+	 *
+	 * @return the Channel {@link Value}
+	 */
+	public default Value<Boolean> getMaxStartAttempts() {
+		return this.getMaxStartAttemptsChannel().value();
+	}
+
+	/**
+	 * Internal method to set the 'nextValue' on
+	 * {@link ChannelId#MAX_START_ATTEMPTS} Channel.
+	 *
+	 * @param value the next value
+	 */
+	public default void _setMaxStartAttempts(Boolean value) {
+		this.getMaxStartAttemptsChannel().setNextValue(value);
+	}
+
+	/**
+	 * Gets the Channel for {@link ChannelId#MAX_STOP_ATTEMPTS}.
+	 *
+	 * @return the Channel
+	 */
+	public default StateChannel getMaxStopAttemptsChannel() {
+		return this.channel(ChannelId.MAX_STOP_ATTEMPTS);
+	}
+
+	/**
+	 * Gets the {@link StateChannel} for {@link ChannelId#MAX_STOP_ATTEMPTS}.
+	 *
+	 * @return the Channel {@link Value}
+	 */
+	public default Value<Boolean> getMaxStopAttempts() {
+		return this.getMaxStopAttemptsChannel().value();
+	}
+
+	/**
+	 * Internal method to set the 'nextValue' on {@link ChannelId#MAX_STOP_ATTEMPTS}
+	 * Channel.
+	 *
+	 * @param value the next value
+	 */
+	public default void _setMaxStopAttempts(Boolean value) {
+		this.getMaxStopAttemptsChannel().setNextValue(value);
+	}
+
+	/**
+	 * Gets the Channel for {@link ChannelId#INVERTER_STATE}.
+	 *
+	 * @return the Channel {@link Channel}
+	 */
+	public default Channel<InverterState> getInverterStateChannel() {
+		return this.channel(ChannelId.INVERTER_STATE);
+	}
+
+	/**
+	 * Gets the {@link InverterState}, see {@link ChannelId#INVERTER_STATE}.
+	 *
+	 * @return the Channel {@link Value}
+	 */
+	public default Value<InverterState> getInverterState() {
+		return this.getInverterStateChannel().value();
+	}
+
+	/**
+	 * Gets the Channel for {@link ChannelId#POWER_FACTOR}.
+	 *
+	 * @return the Channel for the voltage ratio
+	 */
+	public default FloatReadChannel getPowerFactorChannel() {
+		return this.channel(ChannelId.POWER_FACTOR);
+	}
+
+	/**
+	 * Gets the Power Factor.
+	 *
+	 * @return the Channel {@link Value} containing the power factor
+	 */
+	public default Value<Float> getPowerFactor() {
+		return this.getPowerFactorChannel().value();
+	}
+
+	/**
+	 * Gets the Channel for {@link ChannelId#ACTIVE_POWER_LIMIT_MODE}.
+	 *
+	 * @return the Channel
+	 */
+	public default Channel<ActivePowerLimitMode> getActivePowerLimitModeChannel() {
+		return this.channel(ChannelId.ACTIVE_POWER_LIMIT_MODE);
+	}
+
+	/**
+	 * Gets the {@link ActivePowerLimitMode} channel value for {@link ChannelId#ACTIVE_POWER_LIMIT_MODE}.
+	 *
+	 * @return the Channel {@link Value}
+	 */
+	public default Value<ActivePowerLimitMode> getActivePowerLimitMode() {
+		return this.getActivePowerLimitModeChannel().value();
+	}
+
+	/**
+	 * Sets the  {@link ActivePowerLimitMode} value. See {@link ChannelId#ACTIVE_POWER_LIMIT_MODE}.
+	 *
+	 * @param value the {@link ActivePowerLimitMode} value
+	 * @throws OpenemsNamedException on error
+	 */
+	public default void setActivePowerLimitMode(ActivePowerLimitMode value) throws OpenemsNamedException {
+		EnumWriteChannel activePowerModeChannel = this.channel(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_MODE);
+		activePowerModeChannel.setNextWriteValue(value);
+	}
+
+	/**
+	 * Sets the HeartBeat value. See {@link ChannelId#HEART_BEAT}.
+	 *
+	 * @param value the Integer value
+	 * @throws OpenemsNamedException on error
+	 */
+	public default void setHeartBeat(Integer value) throws OpenemsNamedException {
+		IntegerWriteChannel heartBeatChannel = this.channel(ChannelId.HEART_BEAT);
+		heartBeatChannel.setNextWriteValue(value);
+	}
+
+	/**
+	 * Sets the HeartBeat value. See {@link ChannelId#HEART_BEAT}.
+	 *
+	 * @throws OpenemsNamedException on error
+	 */
+	public default void setHeartBeat() throws OpenemsNamedException {
+		this.setHeartBeat(HEART_BEAT_DEFAULT);
+	}
+
+	public static void calculatePhasePowersFromVoltageAndCurrent(PvInverterHopewind meter) {
+		var powerFactor = meter.getPowerFactorChannel();
+
+		calculateL1PowersFromVoltageAndCurrent(meter, powerFactor);
+		calculateL2PowersFromVoltageAndCurrent(meter, powerFactor);
+		calculateL3PowersFromVoltageAndCurrent(meter, powerFactor);
+	}
+
+	private static void calculateL1PowersFromVoltageAndCurrent(ElectricityMeter meter, FloatReadChannel powerFactorL1) {
+		_calculatePhasePowersFromVoltageAndCurrent(meter, powerFactorL1,
+				ElectricityMeter::getActivePowerL1Channel,
+				ElectricityMeter::getReactivePowerL1Channel,
+				ElectricityMeter::getVoltageL1Channel,
+				ElectricityMeter::getCurrentL1Channel
+	    );
+	}
+
+	private static void calculateL2PowersFromVoltageAndCurrent(ElectricityMeter meter, FloatReadChannel powerFactorL2) {
+		_calculatePhasePowersFromVoltageAndCurrent(meter, powerFactorL2,
+				ElectricityMeter::getActivePowerL2Channel,
+				ElectricityMeter::getReactivePowerL2Channel,
+				ElectricityMeter::getVoltageL2Channel,
+				ElectricityMeter::getCurrentL2Channel
+	    );
+	}
+
+	private static void calculateL3PowersFromVoltageAndCurrent(ElectricityMeter meter, FloatReadChannel powerFactorL3) {
+		_calculatePhasePowersFromVoltageAndCurrent(meter, powerFactorL3,
+				ElectricityMeter::getActivePowerL3Channel,
+				ElectricityMeter::getReactivePowerL3Channel,
+				ElectricityMeter::getVoltageL3Channel,
+				ElectricityMeter::getCurrentL3Channel
+	    );
+	}
+
+	public static <M> void _calculatePhasePowersFromVoltageAndCurrent(
+	        M meter,
+	        FloatReadChannel powerFactorChannel,
+	        Function<M, IntegerReadChannel> activePower,
+	        Function<M, IntegerReadChannel> reactivePower,
+	        Function<M, IntegerReadChannel> voltage,
+	        Function<M, IntegerReadChannel> current
+	) {
+		IntegerReadChannel activePowerChannel = activePower.apply(meter);
+		IntegerReadChannel reactivePowerChannel = reactivePower.apply(meter);
+		IntegerReadChannel voltageChannel = voltage.apply(meter);
+		IntegerReadChannel currentChannel = current.apply(meter);
+
+	    powerFactorChannel.onSetNextValue(value -> {
+	        calculatePhasePowersFromVoltageAndCurrent(activePowerChannel, reactivePowerChannel,
+	        		voltageChannel.value().get(), currentChannel.value().get(), value.get());
+	    });
+	    voltageChannel.onSetNextValue(value -> {
+	        calculatePhasePowersFromVoltageAndCurrent(activePowerChannel, reactivePowerChannel,
+	        		value.get(), currentChannel.value().get(), powerFactorChannel.value().get());
+	    });
+	    currentChannel.onSetNextValue(value -> {
+	        calculatePhasePowersFromVoltageAndCurrent(activePowerChannel, reactivePowerChannel,
+	        		voltageChannel.value().get(), value.get(), powerFactorChannel.value().get());
+	    });
+	}
+
+    private static void calculatePhasePowersFromVoltageAndCurrent(IntegerReadChannel activePower, IntegerReadChannel reactivePower,
+    		Integer voltage, Integer current, Float PowerFactor) {
+    	if (voltage == null || current == null || PowerFactor == null) {
+    		return;
+    	}
+    	var apparentPower = calcualteApparentPhasePowerFromVoltageAndCurrent(voltage, current);
+
+    	activePower.setNextValue(calculateActivePhasePowerFromApparentPower(apparentPower, PowerFactor));
+    	reactivePower.setNextValue(calculateReactivePhasePowerFromApparentPower(apparentPower, PowerFactor));
+    }
+
+	private static int calcualteApparentPhasePowerFromVoltageAndCurrent(int voltage, int current) {
+		return (int) (((double) voltage / 1000.0) * ((double) current / 1000.0));
+	}
+
+	private static int calculateActivePhasePowerFromApparentPower(int apparentPower, float powerFactor) {
+		return (int) (apparentPower * powerFactor);
+	}
+
+	private static int calculateReactivePhasePowerFromApparentPower(int apparentPower, float powerFactor) {
+		double phi = Math.acos(powerFactor);
+		return (int) (apparentPower * Math.sin(phi));
 	}
 }

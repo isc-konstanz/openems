@@ -19,6 +19,12 @@ public @interface Config {
 	@AttributeDefinition(name = "Is enabled?", description = "Is this Component enabled?")
 	boolean enabled() default true;
 
+	@AttributeDefinition(name = "Has Watchdog?", description = "Does this Component watch for active power limit updates?")
+	boolean watchdog() default false;
+
+	@AttributeDefinition(name = "Watchdog Timer", description = "The amount of seconds after which the system resets.")
+	int watchdogTimer() default PvInverterHopewind.WATCH_DOG_TIMER_DEFAULT;
+
 	@AttributeDefinition(name = "Start/stop behaviour", description = "Should this Component be forced to start or stop?")
 	StartStopConfig startStop() default StartStopConfig.START;
 

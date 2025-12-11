@@ -69,67 +69,6 @@ public interface RctCessMeter extends
 		}
 	}
 
-	public static void calculatePhasePowersFromVoltageAndCurrent(RctCessMeter meter) {
-		calculateL1PowersFromVoltageAndCurrent(meter);
-		calculateL2PowersFromVoltageAndCurrent(meter);
-		calculateL3PowersFromVoltageAndCurrent(meter);
-	}
-
-	private static void calculateL1PowersFromVoltageAndCurrent(RctCessMeter meter) {
-		ElectricityNode._calculatePhasePowersFromVoltageAndCurrent(meter, meter.getPowerFactorL1Channel(),
-				ElectricityMeter::getActivePowerL1Channel,
-				ElectricityMeter::getReactivePowerL1Channel,
-				ElectricityMeter::getVoltageL1Channel,
-				ElectricityMeter::getCurrentL1Channel
-	    );
-	}
-
-	private static void calculateL2PowersFromVoltageAndCurrent(RctCessMeter meter) {
-		ElectricityNode._calculatePhasePowersFromVoltageAndCurrent(meter, meter.getPowerFactorL2Channel(),
-				ElectricityMeter::getActivePowerL2Channel,
-				ElectricityMeter::getReactivePowerL2Channel,
-				ElectricityMeter::getVoltageL2Channel,
-				ElectricityMeter::getCurrentL2Channel
-	    );
-	}
-
-	private static void calculateL3PowersFromVoltageAndCurrent(RctCessMeter meter) {
-		ElectricityNode._calculatePhasePowersFromVoltageAndCurrent(meter, meter.getPowerFactorL3Channel(),
-				ElectricityMeter::getActivePowerL3Channel,
-				ElectricityMeter::getReactivePowerL3Channel,
-	            ElectricityMeter::getVoltageL3Channel,
-	            ElectricityMeter::getCurrentL3Channel
-	    );
-	}
-
-	public static void calculatePhasePowerFactorsFromHarmonics(RctCessMeter meter) {
-		meter.getCurrentHarmonicDistortionL1Channel().onSetNextValue(value -> {
-			meter._setPowerFactorL1(calculatePhasePowerFactorFromHarmonics(value.get(), meter.getPowerFactor().get()));
-		});
-		meter.getCurrentHarmonicDistortionL2Channel().onSetNextValue(value -> {
-			meter._setPowerFactorL2(calculatePhasePowerFactorFromHarmonics(value.get(), meter.getPowerFactor().get()));
-		});
-		meter.getCurrentHarmonicDistortionL3Channel().onSetNextValue(value -> {
-			meter._setPowerFactorL3(calculatePhasePowerFactorFromHarmonics(value.get(), meter.getPowerFactor().get()));
-		});
-
-		meter.getPowerFactorChannel().onSetNextValue(value -> {
-			Float powerFactor = value.get();
-			if (powerFactor != null) {
-				meter._setPowerFactorL1(calculatePhasePowerFactorFromHarmonics(meter.getCurrentHarmonicDistortionL1().get(), powerFactor));
-				meter._setPowerFactorL2(calculatePhasePowerFactorFromHarmonics(meter.getCurrentHarmonicDistortionL2().get(), powerFactor));
-				meter._setPowerFactorL3(calculatePhasePowerFactorFromHarmonics(meter.getCurrentHarmonicDistortionL3().get(), powerFactor));
-			}
-		});
-	}
-
-	private static Float calculatePhasePowerFactorFromHarmonics(Float totalHarmonicDistortion, Float totalPowerFactor) {
-		if (totalHarmonicDistortion == null || totalPowerFactor == null) {
-			return null;
-		}
-		return Math.min((float) (totalPowerFactor * Math.sqrt(1 + Math.pow(totalHarmonicDistortion / 100., 2))), 1f);
-	}
-
 	/**
 	 * Gets the Channel for {@link ChannelId#POWER_FACTOR}.
 	 *
@@ -410,6 +349,67 @@ public interface RctCessMeter extends
 	 */
 	public default Value<Integer> getCurrentRatio() {
 		return this.getCurrentRatioChannel().value();
+	}
+
+	public static void calculatePhasePowersFromVoltageAndCurrent(RctCessMeter meter) {
+		calculateL1PowersFromVoltageAndCurrent(meter);
+		calculateL2PowersFromVoltageAndCurrent(meter);
+		calculateL3PowersFromVoltageAndCurrent(meter);
+	}
+
+	private static void calculateL1PowersFromVoltageAndCurrent(RctCessMeter meter) {
+		ElectricityNode._calculatePhasePowersFromVoltageAndCurrent(meter, meter.getPowerFactorL1Channel(),
+				ElectricityMeter::getActivePowerL1Channel,
+				ElectricityMeter::getReactivePowerL1Channel,
+				ElectricityMeter::getVoltageL1Channel,
+				ElectricityMeter::getCurrentL1Channel
+	    );
+	}
+
+	private static void calculateL2PowersFromVoltageAndCurrent(RctCessMeter meter) {
+		ElectricityNode._calculatePhasePowersFromVoltageAndCurrent(meter, meter.getPowerFactorL2Channel(),
+				ElectricityMeter::getActivePowerL2Channel,
+				ElectricityMeter::getReactivePowerL2Channel,
+				ElectricityMeter::getVoltageL2Channel,
+				ElectricityMeter::getCurrentL2Channel
+	    );
+	}
+
+	private static void calculateL3PowersFromVoltageAndCurrent(RctCessMeter meter) {
+		ElectricityNode._calculatePhasePowersFromVoltageAndCurrent(meter, meter.getPowerFactorL3Channel(),
+				ElectricityMeter::getActivePowerL3Channel,
+				ElectricityMeter::getReactivePowerL3Channel,
+	            ElectricityMeter::getVoltageL3Channel,
+	            ElectricityMeter::getCurrentL3Channel
+	    );
+	}
+
+	public static void calculatePhasePowerFactorsFromHarmonics(RctCessMeter meter) {
+		meter.getCurrentHarmonicDistortionL1Channel().onSetNextValue(value -> {
+			meter._setPowerFactorL1(calculatePhasePowerFactorFromHarmonics(value.get(), meter.getPowerFactor().get()));
+		});
+		meter.getCurrentHarmonicDistortionL2Channel().onSetNextValue(value -> {
+			meter._setPowerFactorL2(calculatePhasePowerFactorFromHarmonics(value.get(), meter.getPowerFactor().get()));
+		});
+		meter.getCurrentHarmonicDistortionL3Channel().onSetNextValue(value -> {
+			meter._setPowerFactorL3(calculatePhasePowerFactorFromHarmonics(value.get(), meter.getPowerFactor().get()));
+		});
+
+		meter.getPowerFactorChannel().onSetNextValue(value -> {
+			Float powerFactor = value.get();
+			if (powerFactor != null) {
+				meter._setPowerFactorL1(calculatePhasePowerFactorFromHarmonics(meter.getCurrentHarmonicDistortionL1().get(), powerFactor));
+				meter._setPowerFactorL2(calculatePhasePowerFactorFromHarmonics(meter.getCurrentHarmonicDistortionL2().get(), powerFactor));
+				meter._setPowerFactorL3(calculatePhasePowerFactorFromHarmonics(meter.getCurrentHarmonicDistortionL3().get(), powerFactor));
+			}
+		});
+	}
+
+	private static Float calculatePhasePowerFactorFromHarmonics(Float totalHarmonicDistortion, Float totalPowerFactor) {
+		if (totalHarmonicDistortion == null || totalPowerFactor == null) {
+			return null;
+		}
+		return Math.min((float) (totalPowerFactor * Math.sqrt(1 + Math.pow(totalHarmonicDistortion / 100., 2))), 1f);
 	}
 
 }

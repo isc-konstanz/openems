@@ -69,8 +69,6 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 				ElectricityMeter.ChannelId.values(),
 				RctCessMeter.ChannelId.values()
 		);
-		RctCessMeter.calculatePhasePowerFactorsFromHarmonics(this);
-		RctCessMeter.calculatePhasePowersFromVoltageAndCurrent(this);
 	}
 
 	@Activate
@@ -81,6 +79,10 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 				"Modbus", config.modbus_id())) {
 			return;
 		}
+		ElectricityMeter.calculateAverageVoltageFromPhases(this);
+		ElectricityMeter.calculateSumCurrentFromPhases(this);
+		RctCessMeter.calculatePhasePowerFactorsFromHarmonics(this);
+		RctCessMeter.calculatePhasePowersFromVoltageAndCurrent(this);
 	}
 
 	@Override

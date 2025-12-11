@@ -202,6 +202,38 @@
                   "with": "src/themes/openems/environments/oem-meta.ts"
                 }
               ]
+            },
+            "openems-backend-isc": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/theme.ts",
+                  "with": "src/themes/isc/environments/theme.ts"
+                },
+                {
+                  "replace": "src/environments/dummy.ts",
+                  "with": "src/themes/isc/environments/backend-isc.ts"
+                },
+                {
+                  "replace": "src/environments/oem-meta.ts",
+                  "with": "src/themes/isc/environments/oem-meta.ts"
+                }
+              ]
+            },
+            "openems-edge-isc": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/theme.ts",
+                  "with": "src/themes/isc/environments/theme.ts"
+                },
+                {
+                  "replace": "src/environments/dummy.ts",
+                  "with": "src/themes/isc/environments/edge-isc.ts"
+                },
+                {
+                  "replace": "src/environments/oem-meta.ts",
+                  "with": "src/themes/isc/environments/oem-meta.ts"
+                }
+              ]
             }
           }
         },

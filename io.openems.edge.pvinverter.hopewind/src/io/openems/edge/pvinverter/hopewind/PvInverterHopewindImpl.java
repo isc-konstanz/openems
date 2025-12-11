@@ -6,6 +6,7 @@ import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_1;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_2;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_MINUS_3;
+import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.chain;
 import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE;
 import static org.osgi.service.component.annotations.ReferenceCardinality.MANDATORY;
 import static org.osgi.service.component.annotations.ReferenceCardinality.OPTIONAL;
@@ -13,6 +14,8 @@ import static org.osgi.service.component.annotations.ReferencePolicy.DYNAMIC;
 import static org.osgi.service.component.annotations.ReferencePolicy.STATIC;
 import static org.osgi.service.component.annotations.ReferencePolicyOption.GREEDY;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.osgi.service.cm.ConfigurationAdmin;
@@ -37,6 +40,7 @@ import io.openems.common.utils.StringUtils;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
 import io.openems.edge.bridge.modbus.api.BridgeModbus;
 import io.openems.edge.bridge.modbus.api.ElementToChannelConverter;
+import io.openems.edge.bridge.modbus.api.ElementToChannelScaleFactorConverter;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.bridge.modbus.api.ModbusProtocol;
 import io.openems.edge.bridge.modbus.api.element.DummyRegisterElement;
@@ -77,11 +81,7 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent implements PvInverterHopewind, ManagedSymmetricPvInverter,
 		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
 
-	private static final int ACTIVE_POWER_MAX = 60000;
-	private static final int REACTIVE_POWER_MAX = 1000;
-	private static final int APPERENT_POWER_MAX = 60000;
-
-	private final Logger logger = LoggerFactory.getLogger(PvInverterHopewindImpl.class);
+	private final Logger log = LoggerFactory.getLogger(PvInverterHopewindImpl.class);
 
 	private final CalculateEnergyFromPower calculateProductionEnergy = new CalculateEnergyFromPower(this,
 			ElectricityMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY);
@@ -95,6 +95,8 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 
 	@Reference(policy = DYNAMIC, policyOption = GREEDY, cardinality = OPTIONAL)
 	private volatile Timedata timedata = null;
+
+	private volatile Instant watchdog = Instant.MIN;
 
 	@Override
 	@Reference(policy = STATIC, policyOption = GREEDY, cardinality = MANDATORY)
@@ -121,13 +123,25 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 				"Modbus", config.modbus_id())) {
 			return;
 		}
+		this._setMaxApparentPower(APPARENT_POWER_MAX);
+		this._setMaxActivePower(ACTIVE_POWER_MAX);
+		this._setMaxReactivePower(REACTIVE_POWER_MAX);
+
 		this.config = config;
 		if (!config.enabled()) {
 			return;
 		}
-		this._setMaxActivePower(ACTIVE_POWER_MAX);
-		this._setMaxReactivePower(REACTIVE_POWER_MAX);
-		this._setMaxApparentPower(APPERENT_POWER_MAX);
+		ElectricityMeter.calculateAverageVoltageFromPhases(this);
+		ElectricityMeter.calculateSumCurrentFromPhases(this);
+		PvInverterHopewind.calculatePhasePowersFromVoltageAndCurrent(this);
+		
+		if (config.watchdog()) {
+			this.getActivePowerLimitChannel().onSetNextValue(value -> {
+				if (value.isDefined()) {
+					watchdog = Instant.now();
+				}
+			});
+		}
 	}
 
 	@Override
@@ -144,9 +158,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		switch (event.getTopic()) {
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
 			this.handleStateMachine();
+			this.handleWatchdog();
 			this.handleInverterMode();
 
-			this.calculatePowers();
 			this.calculateProductionEnergy.update(this.getActivePower().get());
 			break;
 		}
@@ -165,7 +179,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 				this.setHeartBeat();
 
 			} catch (IllegalArgumentException | OpenemsNamedException e) {
-				this.logError(this.logger, "Setting HeartBeat failed: " + e.getMessage());
+				this.logError(this.log, "Setting HeartBeat failed: " + e.getMessage());
 				e.printStackTrace();
 			}
 		}
@@ -179,7 +193,31 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 			this._setRunFailed(false);
 		} catch (OpenemsNamedException e) {
 			this._setRunFailed(true);
-			this.logError(this.logger, "StateMachine failed: " + e.getMessage());
+			this.logError(this.log, "StateMachine failed: " + e.getMessage());
+		}
+	}
+
+	private void handleWatchdog() {
+		if (this.config.watchdog() && 
+				!this.watchdog.equals(Instant.MIN) && 
+				this.config.watchdogTimer() < Duration.between(this.watchdog, Instant.now()).getSeconds()) {
+			this.logWarn(this.log, 
+					"WatchDog triggered after " + Duration.between(this.watchdog, Instant.now()).getSeconds() + 
+					" seconds. Power limit will be set to 0");
+			try {
+				if (this.config.activePowerLimitMode() == ActivePowerLimitMode.ACTUAL) {
+					this.setActivePowerLimit(0);
+				}
+				else {
+					// TODO: Implement power to percent calculation
+					throw new UnsupportedOperationException("Setting percent power limit not yet supported.");
+				}
+				this.watchdog = Instant.MIN;
+
+			} catch (OpenemsNamedException e) {
+				this.logError(this.log, "Updating power limit failed: " + e.getMessage());
+				e.printStackTrace();
+			}
 		}
 	}
 
@@ -194,38 +232,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 				this.setActivePowerLimitMode(activePowerLimitModeConfig);
 
 			} catch (OpenemsNamedException e) {
-			this.logError(this.logger, 
+			this.logError(this.log, 
 				"Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
 			}
-		}
-	}
-
-	private void calculatePowers(){
-		Integer voltage1 = this.getVoltageL1().get();
-		Integer voltage2 = this.getVoltageL2().get();
-		Integer voltage3 = this.getVoltageL3().get();
-
-		Integer current1 = this.getCurrentL1().get();
-		Integer current2 = this.getCurrentL2().get();
-		Integer current3 = this.getCurrentL3().get();
-
-		Integer powerFactor = TypeUtils.getAsType(OpenemsType.INTEGER, this.channel(PvInverterHopewind.ChannelId.POWER_FACTOR).value().get());
-
-		if (voltage1 != null && voltage2 != null && voltage3 != null) {
-			this._setVoltage((voltage1 + voltage2 + voltage3) / 3);
-		}
-		if (current1 != null && current2 != null && current3 != null) {
-			this._setCurrent(current1 + current2 + current3);
-		}
-		if (voltage1 != null &&  current1 != null && powerFactor != null) {
-			this.getActivePowerL1Channel().setNextValue(voltage1/1000 * current1/1000 * powerFactor/100);
-		}
-		if (voltage2 != null &&  current2 != null && powerFactor != null) {
-			this.getActivePowerL2Channel().setNextValue(voltage2/1000 * current2/1000 * powerFactor/100);
-		}
-		if (voltage3 != null &&  current3 != null && powerFactor != null) {
-			this.getActivePowerL3Channel().setNextValue(voltage3/1000 * current3/1000 * powerFactor/100);
-
 		}
 	}
 
@@ -484,36 +493,36 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 //						m(PvInverterHopewind.ChannelId.NS_PROTECTION_SWITCH,
 //								new UnsignedWordElement(34295))),
 
-				new FC3ReadRegistersTask(40002, Priority.HIGH,
+//				new FC3ReadRegistersTask(40003, Priority.HIGH,
 //						m(PvInverterHopewind.ChannelId.REG_40000,
 //								new UnsignedWordElement(40000)),
 //						m(PvInverterHopewind.ChannelId.REG_40001,
 //								new UnsignedWordElement(40001)),
-						m(PvInverterHopewind.ChannelId.REACTIV_POWER_REGULATION_MODE,
-								new UnsignedWordElement(40002)),
-						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_FACTOR_REGULATION,
-								new UnsignedWordElement(40003), SCALE_FACTOR_MINUS_2),
-						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_REGULATION,
-								new UnsignedWordElement(40004), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_PERCENT_REGULATION,
-								new UnsignedWordElement(40005), SCALE_FACTOR_2),
-						new DummyRegisterElement(40006, 40010),
-						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_MODE,
-								new UnsignedWordElement(40011)),
-						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
-								new UnsignedWordElement(40012), SCALE_FACTOR_1),
-						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
-								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
+//						m(PvInverterHopewind.ChannelId.REACTIV_POWER_REGULATION_MODE,
+//								new UnsignedWordElement(40002)),
+//						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_FACTOR_REGULATION,
+//								new UnsignedWordElement(40003), chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_4)),
+//						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_REGULATION_VALUE,
+//								new UnsignedWordElement(40004), SCALE_FACTOR_1),
+//						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_REGULATION_PERCENT,
+//								new UnsignedWordElement(40005), SCALE_FACTOR_2),
+//						new DummyRegisterElement(40006, 40010),
+//						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_MODE,
+//								new UnsignedWordElement(40011)),
+//						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
+//								new UnsignedWordElement(40012), SCALE_FACTOR_1),
+//						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
+//								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
 
-				new FC3ReadRegistersTask(40200, Priority.HIGH,
-						m(PvInverterHopewind.ChannelId.STARTUP,
-								new UnsignedWordElement(40200)),
-						m(PvInverterHopewind.ChannelId.SHUTDOWN,
-								new UnsignedWordElement(40201)),
-						m(PvInverterHopewind.ChannelId.RESET,
-								new UnsignedWordElement(40202))),
+//				new FC3ReadRegistersTask(40200, Priority.LOW,
+//						m(PvInverterHopewind.ChannelId.STARTUP,
+//								new UnsignedWordElement(40200)),
+//						m(PvInverterHopewind.ChannelId.SHUTDOWN,
+//								new UnsignedWordElement(40201)),
+//						m(PvInverterHopewind.ChannelId.RESET,
+//								new UnsignedWordElement(40202))),
 
-				new FC3ReadRegistersTask(40500, Priority.HIGH,
+				new FC3ReadRegistersTask(40500, Priority.LOW,
 						m(PvInverterHopewind.ChannelId.DC_VOLTAGE_MPPT_1,
 								new UnsignedWordElement(40500), SCALE_FACTOR_MINUS_1),
 						m(PvInverterHopewind.ChannelId.DC_VOLTAGE_MPPT_2,
@@ -562,14 +571,15 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 						m(PvInverterHopewind.ChannelId.DC_POWER_MPPT_3,
 								new UnsignedWordElement(40526), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.DC_POWER_MPPT_4,
-								new UnsignedWordElement(40527), SCALE_FACTOR_1),
-						new DummyRegisterElement(40528, 40531),
+								new UnsignedWordElement(40527), SCALE_FACTOR_1)),
+
+				new FC3ReadRegistersTask(40532, Priority.HIGH,
 						m(ElectricityMeter.ChannelId.VOLTAGE_L1,
-								new UnsignedWordElement(40532), VOLTAGE_CONVERTER),
+								new UnsignedWordElement(40532), CONVERT_VOLTAGE),
 						m(ElectricityMeter.ChannelId.VOLTAGE_L2,
-								new UnsignedWordElement(40533), VOLTAGE_CONVERTER),
+								new UnsignedWordElement(40533), CONVERT_VOLTAGE),
 						m(ElectricityMeter.ChannelId.VOLTAGE_L3,
-								new UnsignedWordElement(40534), VOLTAGE_CONVERTER),
+								new UnsignedWordElement(40534), CONVERT_VOLTAGE),
 						m(ElectricityMeter.ChannelId.CURRENT_L1,
 								new UnsignedWordElement(40535), SCALE_FACTOR_2),
 						m(ElectricityMeter.ChannelId.CURRENT_L2,
@@ -585,8 +595,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 						m(PvInverterHopewind.ChannelId.APPERENT_POWER,
 								new UnsignedWordElement(40541), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.POWER_FACTOR,
-								new UnsignedWordElement(40542), SCALE_FACTOR_MINUS_2),
-						new DummyRegisterElement(40543, 40543),
+								new UnsignedWordElement(40542), chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_4))),
+
+				new FC3ReadRegistersTask(40544, Priority.LOW,
 						m(PvInverterHopewind.ChannelId.TEMPERATURE,
 								new UnsignedWordElement(40544), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.INSULATION_RESISTANCE,
@@ -694,7 +705,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 						m(PvInverterHopewind.ChannelId.RATED_VOLTAGE,
 							new UnsignedWordElement(40647))),
 
-				new FC3ReadRegistersTask(41000, Priority.HIGH,
+				new FC3ReadRegistersTask(41000, Priority.LOW,
 						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_1,
 								new UnsignedWordElement(41000), SCALE_FACTOR_1),
 						m(PvInverterHopewind.ChannelId.DC_POWER_STRING_2,
@@ -765,12 +776,12 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 								new UnsignedWordElement(40002))),
 				new FC6WriteRegisterTask(40003,
 						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_FACTOR_REGULATION,
-								new SignedWordElement(40003), SCALE_FACTOR_MINUS_2)),
+								new SignedWordElement(40003), chain(CONVERT_FLOAT, SCALE_FACTOR_MINUS_4))),
 				new FC6WriteRegisterTask(40004,
 						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_REGULATION,
 								new UnsignedWordElement(40004), SCALE_FACTOR_1)),
 				new FC6WriteRegisterTask(40005,
-						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_PERCENT_REGULATION,
+						m(PvInverterHopewind.ChannelId.REACTIVE_POWER_REGULATION_PERCENT,
 								new UnsignedWordElement(40005), SCALE_FACTOR_MINUS_2)),
 
 				new FC6WriteRegisterTask(40011,
@@ -795,7 +806,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		);
 	}
 
-	protected static final ElementToChannelConverter STRING_CONVERTER = new ElementToChannelConverter(v -> {
+	public static final ElementToChannelConverter SCALE_FACTOR_MINUS_4 = new ElementToChannelScaleFactorConverter(-4);
+
+	protected static final ElementToChannelConverter CONVERT_STRING = new ElementToChannelConverter(v -> {
 		if (v == null) {
 				return null;
 		}
@@ -807,12 +820,26 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		return result.toString();
 	});
 
-	protected static final ElementToChannelConverter VOLTAGE_CONVERTER = new ElementToChannelConverter(v -> {
+	protected static final ElementToChannelConverter CONVERT_VOLTAGE = new ElementToChannelConverter(v -> {
 		if (v == null) {
 				return null;
 		}
 		int value = TypeUtils.getAsType(OpenemsType.INTEGER, v);
 		return (int) Math.round(value * 100 / 1.732);
+	});
+
+	private static final ElementToChannelConverter CONVERT_FLOAT = new ElementToChannelConverter(v -> {
+		if (v == null) {
+			return null;
+		}
+		if (v instanceof Number n) {
+			return n.floatValue();
+		}
+		if (v instanceof String s) {
+			return Float.valueOf(s);
+		}
+		throw new IllegalArgumentException(
+			"Type [" + v.getClass().getName() + "] not supported by float converter");
 	});
 
 	@Override

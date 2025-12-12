@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -71,9 +70,6 @@ import io.openems.common.utils.JsonUtils;
  * }
  * </pre>
  *
- * <p>
- * This implementation does not require any login. It always serves the same
- * user, which has 'ADMIN'-permissions on all given Edges.
  */
 @Designate(ocd = Config.class, factory = false)
 @Component(//
@@ -86,21 +82,14 @@ import io.openems.common.utils.JsonUtils;
 })
 public class MetadataFile extends AbstractMetadata implements Metadata, EventHandler {
 
-	private static final String USER_ID = "admin";
-	private static final String USER_NAME = "Administrator";
-	private static final Role USER_GLOBAL_ROLE = Role.ADMIN;
-	private JsonObject settings = new JsonObject();
-
-	private static Language LANGUAGE = Language.DE;
-
 	private final Logger log = LoggerFactory.getLogger(MetadataFile.class);
-	private final Map<String, MyEdge> edges = new HashMap<>();
+	private final Map<String, FileUser> users = new HashMap<>();
+	private final Map<String, FileEdge> edges = new HashMap<>();
 	private final SimpleEdgeHandler edgeHandler = new SimpleEdgeHandler();
 
 	@Reference
 	private EventAdmin eventAdmin;
 
-	private User user = this.generateUser();
 	private String path = "";
 
 	public MetadataFile() {
@@ -125,26 +114,36 @@ public class MetadataFile extends AbstractMetadata implements Metadata, EventHan
 
 	@Override
 	public User authenticate(String username, String password) throws OpenemsNamedException {
-		return this.user = this.generateUser();
+		this.refreshData();
+		if (this.users.containsKey(username)) {
+			var user = this.users.get(username);
+			if (user.validatePassword(password)) {
+				return user;
+			}
+		}
+		throw OpenemsError.COMMON_AUTHENTICATION_FAILED.exception();
 	}
 
 	@Override
 	public User authenticate(String token) throws OpenemsNamedException {
-		if (this.user.getToken().equals(token)) {
-			return this.user;
+		this.refreshData();
+		for (FileUser user : this.users.values()) {
+			if (user.getToken().equals(token)) {
+				return user;
+			}
 		}
 		throw OpenemsError.COMMON_AUTHENTICATION_FAILED.exception();
 	}
 
 	@Override
 	public void logout(User user) {
-		this.user = this.generateUser();
+		//
 	}
 
 	@Override
 	public synchronized Optional<String> getEdgeIdForApikey(String apikey) {
 		this.refreshData();
-		for (Entry<String, MyEdge> entry : this.edges.entrySet()) {
+		for (Entry<String, FileEdge> entry : this.edges.entrySet()) {
 			var edge = entry.getValue();
 			if (edge.getApikey().equals(apikey)) {
 				return Optional.of(edge.getId());
@@ -156,7 +155,7 @@ public class MetadataFile extends AbstractMetadata implements Metadata, EventHan
 	@Override
 	public synchronized Optional<Edge> getEdgeBySetupPassword(String setupPassword) {
 		this.refreshData();
-		for (MyEdge edge : this.edges.values()) {
+		for (FileEdge edge : this.edges.values()) {
 			if (edge.getSetupPassword().equals(setupPassword)) {
 				return Optional.of(edge);
 			}
@@ -173,7 +172,14 @@ public class MetadataFile extends AbstractMetadata implements Metadata, EventHan
 
 	@Override
 	public Optional<User> getUser(String userId) {
-		return Optional.of(this.user);
+		this.refreshData();
+		User user = this.users.get(userId);
+		return Optional.ofNullable(user);
+	}
+
+	@Override
+	public void registerUser(JsonObject jsonObject, String oem) throws OpenemsNamedException {
+		throw new UnsupportedOperationException("FileMetadata.registerUser() is not implemented");
 	}
 
 	@Override
@@ -182,69 +188,26 @@ public class MetadataFile extends AbstractMetadata implements Metadata, EventHan
 		return this.edges.values().stream().filter(Edge::isOffline).collect(Collectors.toUnmodifiableList());
 	}
 
-	private synchronized void refreshData() {
-		if (this.edges.isEmpty()) {
-			// read file
-			var sb = new StringBuilder();
-			String line = null;
-			try (var br = new BufferedReader(new FileReader(this.path))) {
-				while ((line = br.readLine()) != null) {
-					sb.append(line);
-				}
-			} catch (IOException e) {
-				this.logWarn(this.log, "Unable to read file [" + this.path + "]: " + e.getMessage());
-				e.printStackTrace();
-				return;
-			}
-
-			List<MyEdge> edges = new ArrayList<>();
-
-			// parse to JSON
-			try {
-				var config = JsonUtils.parse(sb.toString());
-				var jEdges = JsonUtils.getAsJsonObject(config, "edges");
-				for (Entry<String, JsonElement> entry : jEdges.entrySet()) {
-					var edge = JsonUtils.getAsJsonObject(entry.getValue());
-					edges.add(new MyEdge(//
-							this, //
-							entry.getKey(), // Edge-ID
-							JsonUtils.getAsString(edge, "apikey"), //
-							JsonUtils.getAsOptionalString(edge, "setuppassword").orElse(""), //
-							JsonUtils.getAsString(edge, "comment"), //
-							"", // Version
-							"" // Product-Type
-					));
-				}
-			} catch (OpenemsNamedException e) {
-				this.logWarn(this.log, "Unable to JSON-parse file [" + this.path + "]: " + e.getMessage());
-				e.printStackTrace();
-				return;
-			}
-
-			// Add Edges and configure User permissions
-			for (MyEdge edge : edges) {
-				this.edges.put(edge.getId(), edge);
-			}
-
-			final var previousUser = this.user;
-			final var hasMultipleEdges = edges.size() > 1;
-			if (previousUser.hasMultipleEdges() != hasMultipleEdges) {
-				this.user = new User(previousUser.getId(), previousUser.getName(), previousUser.getToken(),
-						previousUser.getLanguage(), previousUser.getGlobalRole(), previousUser.getEdgeRoles(),
-						hasMultipleEdges, previousUser.getSettings());
-			}
-		}
-		this.setInitialized();
+	@Override
+	public void updateUserLanguage(User user, Language locale) throws OpenemsNamedException {
+		// TODO: Update metadata file
+		user.setLanguage(locale);
 	}
 
-	private User generateUser() {
-		return new User(MetadataFile.USER_ID, MetadataFile.USER_NAME, UUID.randomUUID().toString(),
-				MetadataFile.LANGUAGE, MetadataFile.USER_GLOBAL_ROLE, this.edges.size() > 1, this.settings);
+	@Override
+	public void updateUserSettings(User user, JsonObject settings) throws OpenemsNamedException {
+		// TODO: Update metadata file
+		users.put(user.getId(), FileUser.fromUser((FileUser) user, settings));
 	}
 
 	@Override
 	public void addEdgeToUser(User user, Edge edge) throws OpenemsNamedException {
-		throw new UnsupportedOperationException("FileMetadata.addEdgeToUser() is not implemented");
+		// TODO: Update metadata file
+		if (!user.hasMultipleEdges()) {
+			users.put(user.getId(), FileUser.fromUser((FileUser) user, (FileEdge) edge, Role.INSTALLER));
+			return;
+		}
+		user.setRole(edge.getId(), Role.INSTALLER);
 	}
 
 	@Override
@@ -289,43 +252,6 @@ public class MetadataFile extends AbstractMetadata implements Metadata, EventHan
 	}
 
 	@Override
-	public void registerUser(JsonObject jsonObject, String oem) throws OpenemsNamedException {
-		throw new UnsupportedOperationException("FileMetadata.registerUser() is not implemented");
-	}
-
-	@Override
-	public void updateUserLanguage(User user, Language locale) throws OpenemsNamedException {
-		MetadataFile.LANGUAGE = locale;
-	}
-
-	@Override
-	public EventAdmin getEventAdmin() {
-		return this.eventAdmin;
-	}
-
-	@Override
-	public EdgeHandler edge() {
-		return this.edgeHandler;
-	}
-
-	@Override
-	public void handleEvent(Event event) {
-		var reader = new EventReader(event);
-
-		switch (event.getTopic()) {
-		case Edge.Events.ON_SET_CONFIG -> {
-			this.edgeHandler.setEdgeConfigFromEvent(reader, (edge, oldConfig, newConfig) -> {
-				EventBuilder.from(this.eventAdmin, Edge.Events.ON_UPDATE_CONFIG) //
-						.addArg(Edge.Events.OnUpdateConfig.EDGE_ID, edge.getId()) //
-						.addArg(Edge.Events.OnUpdateConfig.OLD_CONFIG, oldConfig) //
-						.addArg(Edge.Events.OnUpdateConfig.NEW_CONFIG, newConfig) //
-						.send();
-			});
-		}
-		}
-	}
-
-	@Override
 	public Optional<String> getSerialNumberForEdge(Edge edge) {
 		throw new UnsupportedOperationException("FileMetadata.getSerialNumberForEdge() is not implemented");
 	}
@@ -363,7 +289,8 @@ public class MetadataFile extends AbstractMetadata implements Metadata, EventHan
 	@Override
 	public List<EdgeMetadata> getPageDevice(User user, PaginationOptions paginationOptions)
 			throws OpenemsNamedException {
-		return MetadataUtils.getPageDevice(user, this.edges.values(), paginationOptions);
+		var userEdges = this.edges.values().stream().filter(e -> user.getRole(e.getId()).isPresent()).collect(Collectors.toList());
+		return MetadataUtils.getPageDevice(user, userEdges, paginationOptions);
 	}
 
 	@Override
@@ -372,14 +299,16 @@ public class MetadataFile extends AbstractMetadata implements Metadata, EventHan
 		if (edge == null) {
 			return null;
 		}
-		user.setRole(edgeId, Role.ADMIN);
-
+		var edgeRole = user.getRole(edgeId);
+		if (!edgeRole.isPresent()) {
+			return null;
+		}
 		return new EdgeMetadata(//
 				edge.getId(), //
 				edge.getComment(), //
 				edge.getProducttype(), //
 				edge.getVersion(), //
-				Role.ADMIN, //
+				edgeRole.get(), //
 				edge.isOnline(), //
 				edge.getLastmessage(), //
 				null, // firstSetupProtocol
@@ -393,17 +322,90 @@ public class MetadataFile extends AbstractMetadata implements Metadata, EventHan
 	}
 
 	@Override
+	public EventAdmin getEventAdmin() {
+		return this.eventAdmin;
+	}
+
+	@Override
+	public EdgeHandler edge() {
+		return this.edgeHandler;
+	}
+
+	@Override
+	public void handleEvent(Event event) {
+		var reader = new EventReader(event);
+
+		switch (event.getTopic()) {
+		case Edge.Events.ON_SET_CONFIG -> {
+			this.edgeHandler.setEdgeConfigFromEvent(reader, (edge, oldConfig, newConfig) -> {
+				EventBuilder.from(this.eventAdmin, Edge.Events.ON_UPDATE_CONFIG) //
+						.addArg(Edge.Events.OnUpdateConfig.EDGE_ID, edge.getId()) //
+						.addArg(Edge.Events.OnUpdateConfig.OLD_CONFIG, oldConfig) //
+						.addArg(Edge.Events.OnUpdateConfig.NEW_CONFIG, newConfig) //
+						.send();
+			});
+		}
+		}
+	}
+
+	private synchronized void refreshData() {
+		if (this.edges.isEmpty()) {
+			// Read file
+			var sb = new StringBuilder();
+			String line = null;
+			try (var br = new BufferedReader(new FileReader(this.path))) {
+				while ((line = br.readLine()) != null) {
+					sb.append(line);
+				}
+			} catch (IOException e) {
+				this.logWarn(this.log, "Unable to read file [" + this.path + "]: " + e.getMessage());
+				e.printStackTrace();
+				return;
+			}
+
+			List<FileUser> users = new ArrayList<>();
+			List<FileEdge> edges = new ArrayList<>();
+
+			// parse to JSON
+			try {
+				var jsonConfig = JsonUtils.parse(sb.toString());
+				var jsonUsers = JsonUtils.getAsOptionalJsonObject(jsonConfig, "users");
+				var jsonEdges = JsonUtils.getAsJsonObject(jsonConfig, "edges");
+
+				for (Entry<String, JsonElement> entry : jsonEdges.entrySet()) {
+					edges.add(FileEdge.fromJson(this, entry.getKey(), 
+							JsonUtils.getAsJsonObject(entry.getValue())));
+				}
+				if (jsonUsers.isPresent()) {
+					for (Entry<String, JsonElement> entry : jsonUsers.get().entrySet()) {
+						users.add(FileUser.fromJson(entry.getKey(), JsonUtils.getAsJsonObject(entry.getValue()), edges));
+					}
+				}
+			} catch (OpenemsNamedException e) {
+				this.logWarn(this.log, "Unable to JSON-parse file [" + this.path + "]: " + e.getMessage());
+				e.printStackTrace();
+				return;
+			}
+			if (users.size() == 0) {
+				users.add(FileUser.fallbackAdmin(edges));
+			}
+			for (FileUser user : users) {
+				this.users.put(user.getId(), user);
+			}
+			for (FileEdge edge : edges) {
+				this.edges.put(edge.getId(), edge);
+			}
+		}
+		this.setInitialized();
+	}
+
+	@Override
 	public void logGenericSystemLog(GenericSystemLog systemLog) {
 		this.logInfo(this.log,
 				"%s on %s executed %s [%s]".formatted(systemLog.user().getId(), systemLog.edgeId(), systemLog.teaser(),
 						systemLog.getValues().entrySet().stream() //
 								.map(t -> t.getKey() + "=" + t.getValue()) //
 								.collect(joining(", "))));
-	}
-
-	@Override
-	public void updateUserSettings(User user, JsonObject settings) {
-		this.settings = settings == null ? new JsonObject() : settings;
 	}
 
 }

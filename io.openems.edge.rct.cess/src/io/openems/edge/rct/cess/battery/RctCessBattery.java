@@ -2,6 +2,7 @@ package io.openems.edge.rct.cess.battery;
 
 import static io.openems.edge.common.type.TypeUtils.divide;
 import static io.openems.edge.common.type.TypeUtils.multiply;
+import static io.openems.edge.common.type.TypeUtils.abs;
 
 import java.util.function.Consumer;
 
@@ -59,6 +60,10 @@ public interface RctCessBattery extends Battery, BatteryErrorAcknowledge,
 		POWER(Doc.of(OpenemsType.INTEGER)
 				.unit(Unit.WATT)
 				.persistencePriority(PersistencePriority.HIGH)),
+
+		RACK_SOC(Doc.of(OpenemsType.INTEGER)
+				.unit(Unit.PERCENT)
+				.persistencePriority(PersistencePriority.MEDIUM)),
 
 		INSULATION_VALUE(Doc.of(OpenemsType.INTEGER)
 				.unit(Unit.OHM)
@@ -526,12 +531,49 @@ public interface RctCessBattery extends Battery, BatteryErrorAcknowledge,
 			}
 			if (current != 0) {
 				// TODO: Validate if this is a acceptable simplification for the inner resistance
-				battery._setInnerResistance(multiply(divide(voltage, current), 1000));
+				battery._setInnerResistance(abs(multiply(divide(voltage, current), 1000)));
 			}
 			battery._setPower(multiply(voltage, current));
 		};
 		battery.getVoltageChannel().onSetNextValue(calculate);
 		battery.getVoltageChannel().onSetNextValue(calculate);
+	}
+
+	public static void activateSocUpdate(RctCessBattery battery) {
+		Channel<Integer> batterySocChannel = battery.channel(RctCessBattery.ChannelId.RACK_SOC);
+
+		final Consumer<Value<Integer>> calculate = ignore -> {
+			var batterySoc = batterySocChannel.value();
+			var batteryChargeMaxCurrent = battery.getChargeMaxCurrent();
+			var batteryDischargeMaxCurrent = battery.getDischargeMaxCurrent();
+			final Integer soc;
+			if (batterySoc.isDefined()) {
+				if (batteryDischargeMaxCurrent.isDefined()
+						&& batterySoc.get() <= 2
+						&& batteryDischargeMaxCurrent.get() <= 100) {
+					// Set the SoC to 0 if it is less than 3 %
+					soc = 0;
+
+				} else if (batteryChargeMaxCurrent.isDefined()
+						&& batterySoc.get() >= 98
+						&& batteryChargeMaxCurrent.get() <= 100) {
+					// Set the SoC to 100 if it is more than 97 %
+					soc = 100;
+
+				} else {
+					// Apply the normal SoC if it not in the above ranges.
+					soc = batterySoc.get();
+				}
+
+			} else {
+				// Original Battery-SoC is undefined
+				soc = null;
+			}
+			battery._setSoc(soc);
+		};
+		batterySocChannel.onSetNextValue(calculate);
+		battery.getChargeMaxCurrentChannel().onSetNextValue(calculate);
+		battery.getDischargeMaxCurrentChannel().onSetNextValue(calculate);
 	}
 
 }

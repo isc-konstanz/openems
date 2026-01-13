@@ -116,6 +116,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 			return;
 		}
 		RctCessBattery.calculatePowerFromVoltageAndCurrent(this);
+		RctCessBattery.activateSocUpdate(this);
 	}
 
 	@Override
@@ -269,7 +270,7 @@ public class RctCessBatteryImpl extends AbstractOpenemsModbusComponent implement
 								new SignedWordElement(0x0009), SCALE_FACTOR_MINUS_1),
 						m(RctCessBattery.ChannelId.RACK_CHARGE_STATE,
 								new SignedWordElement(0x000A)),
-						m(Battery.ChannelId.SOC,
+						m(RctCessBattery.ChannelId.RACK_SOC,
 								new UnsignedWordElement(0x000B), SCALE_FACTOR_MINUS_1),
 						m(Battery.ChannelId.SOH,
 								new UnsignedWordElement(0x000C), SCALE_FACTOR_MINUS_1),

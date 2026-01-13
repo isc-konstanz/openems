@@ -1,7 +1,5 @@
 package io.openems.edge.rct.cess;
 
-import static io.openems.edge.common.type.TypeUtils.multiply;
-import static io.openems.edge.common.type.TypeUtils.subtract;
 import static java.lang.Math.abs;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -9,7 +7,6 @@ import static java.lang.Math.round;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.function.BiFunction;
 
 import org.apache.logging.log4j.util.TriConsumer;
 
@@ -81,13 +78,6 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 		var chargeMaxCurrent = battery.getChargeMaxCurrentChannel().getNextValue().get();
 		var dischargeMaxCurrent = battery.getDischargeMaxCurrentChannel().getNextValue().get();
 
-		final var voltRegulationChargeMaxCurrent = calculateMaxCurrent(battery, inverter, cycleTime,
-				this.pt1FilterChargeMaxCurrentVoltageLimit, TypeUtils::min, TypeUtils::subtract, true);
-		final var voltRegulationDischargeMaxCurrent = calculateMaxCurrent(battery, inverter, cycleTime,
-				this.pt1FilterDischargeMaxCurrentVoltageLimit, TypeUtils::max, TypeUtils::sum, false);
-
-		chargeMaxCurrent = TypeUtils.min(chargeMaxCurrent, voltRegulationChargeMaxCurrent);
-		dischargeMaxCurrent = TypeUtils.min(dischargeMaxCurrent, voltRegulationDischargeMaxCurrent);
 
 		final var voltage = battery.getVoltageChannel().getNextValue().get();
 		this.calculateAllowedChargeDischargePower(clockProvider, this.parent.isStarted(),
@@ -189,66 +179,4 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 		return min(thisValue, lastValue + thisValue * millis * RctCess.MAX_POWER_INCREASE_PERCENTAGE / 1000.F /* convert [mW] to [W] */);
 	}
 
-	private record RegulationValues(
-			boolean isBatteryStarted,
-			int voltage,
-			int current,
-			int chargeMaxVoltage,
-			int dischargeMinVoltage,
-			Integer innerResistance,
-			int inverterDcMinVoltage,
-			int inverterDcMaxVoltage) {
-		private static RegulationValues from(Battery battery, SymmetricBatteryInverter inverter) {
-			var isBatteryStarted = battery.isStarted();
-			var voltage = battery.getVoltage().get();
-			var current = battery.getCurrent().get();
-			var chargeMaxVoltage = battery.getChargeMaxVoltage().get();
-			var dischargeMinVoltage = battery.getDischargeMinVoltage().get();
-			var innerResistance = battery.getInnerResistance().get();
-			var inverterDcMinVoltage = inverter.getDcMinVoltage().get();
-			var inverterDcMaxVoltage = inverter.getDcMaxVoltage().get();
-			if (!isBatteryStarted
-					|| voltage == null
-					|| current == null
-					|| chargeMaxVoltage == null
-					|| dischargeMinVoltage == null
-					|| innerResistance == null
-					|| inverterDcMinVoltage == null
-					|| inverterDcMaxVoltage == null
-			) {
-				return null;
-			}
-			return new RegulationValues(isBatteryStarted, voltage, current, chargeMaxVoltage, dischargeMinVoltage,
-					innerResistance, inverterDcMinVoltage, inverterDcMaxVoltage);
-		}
-	}
-
-	private static Integer calculateMaxCurrent(Battery battery, SymmetricBatteryInverter inverter, int cycleTime,
-			Pt1filter pt1Filter, BiFunction<Integer, Integer, Integer> dcLimit,
-			BiFunction<Double, Double, Double> typeUtilsMethod, boolean invert) {
-		var regulationValues = RegulationValues.from(battery, inverter);
-		if (regulationValues == null) {
-			return null;
-		}
-
-		final var batteryLimit = invert
-				? regulationValues.chargeMaxVoltage
-				: regulationValues.dischargeMinVoltage;
-		final var inverterLimit = invert
-				? regulationValues.inverterDcMaxVoltage
-				: regulationValues.inverterDcMinVoltage;
-		final var limitVoltage = dcLimit.apply(
-				batteryLimit,
-				inverterLimit);
-
-		var subtractLimit = subtract(regulationValues.voltage, limitVoltage);
-		var voltageDifference = invert ? multiply(subtractLimit, -1) : subtractLimit;
-
-		var resistance = regulationValues.innerResistance / 1000.;
-		final var deltaChargeCurrent = voltageDifference / resistance;
-		final var maxCurrentVoltLimit = typeUtilsMethod.apply(deltaChargeCurrent, (double) regulationValues.current);
-		pt1Filter.setCycleTime(cycleTime);
-
-		return pt1Filter.applyPt1Filter(max(maxCurrentVoltLimit, -5.0));
-	}
 }

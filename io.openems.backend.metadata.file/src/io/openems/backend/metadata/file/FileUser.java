@@ -6,7 +6,9 @@ import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -34,6 +36,11 @@ public class FileUser extends User {
 	private static final String FALLBACK_SALT = "DEFAULT";
 	private static final Language FALLBACK_LANGUAGE = Language.DE;
 
+	/**
+	 * Roles per Edge-ID.
+	 */
+	private final NavigableMap<String, Role> roles = new TreeMap<>();
+
 	private final byte[] password;
 	private final byte[] salt;
 
@@ -51,9 +58,38 @@ public class FileUser extends User {
 
 	private FileUser(String login, String name, final byte[] password, final byte[] salt, String token, 
 			Language language, Role globalRole, NavigableMap<String, Role> roles, JsonObject settings) {
-		super(login, name, token, language, globalRole, roles, roles.size() > 1, settings);
+		super(login, name, token, language, globalRole, roles.size() > 1, settings);
+		this.roles.putAll(roles);
 		this.password = password;
 		this.salt = salt;
+	}
+
+	/**
+	 * Gets all Roles for Edge-IDs.
+	 *
+	 * @return the map of Roles
+	 */
+	public NavigableMap<String, Role> getEdgeRoles() {
+		return Collections.unmodifiableNavigableMap(this.roles);
+	}
+
+	/**
+	 * Gets the Role for a given Edge-ID.
+	 *
+	 * @return the Role
+	 */
+	public Optional<Role> getRole(String edgeId) {
+		return Optional.ofNullable(this.roles.get(edgeId));
+	}
+
+	/**
+	 * Sets the Role for a given Edge-ID.
+	 *
+	 * @param edgeId the Edge-ID
+	 * @param role   the Role
+	 */
+	public void setRole(String edgeId, Role role) {
+		this.roles.put(edgeId, role);
 	}
 
 	private static String generateToken(String passwordAsBase64, String saltAsBase64, String token) {
@@ -62,11 +98,11 @@ public class FileUser extends User {
 		}
 		byte[] salt = Base64.getDecoder().decode(saltAsBase64);
 		byte[] hash = FileUser.hashPassword(passwordAsBase64, salt);
-	    StringBuilder tokenBuilder = new StringBuilder(hash.length * 2);
-	    for (byte b : hash) {
-	        tokenBuilder.append(String.format("%02x", b));
-	    }
-	    return tokenBuilder.toString();
+		StringBuilder tokenBuilder = new StringBuilder(hash.length * 2);
+		for (byte b : hash) {
+			tokenBuilder.append(String.format("%02x", b));
+		}
+		return tokenBuilder.toString();
 	}
 
 	/**
@@ -88,8 +124,8 @@ public class FileUser extends User {
 	 * Validates if password+salt match the given password.
 	 *
 	 * @param passwordAsBase64 the hashed password
-	 * @param saltAsBase64     the salt
-	 * @param password         the given password
+	 * @param saltAsBase64	 the salt
+	 * @param password		 the given password
 	 * @return true if they match.
 	 */
 	public static boolean validatePassword(String passwordAsBase64, String saltAsBase64, String password) {
@@ -101,7 +137,7 @@ public class FileUser extends User {
 	 * Validates if password+salt match the given password.
 	 *
 	 * @param password1 the hashed password
-	 * @param salt      the salt
+	 * @param salt	  the salt
 	 * @param password2 the given password
 	 * @return true if they match.
 	 */
@@ -114,7 +150,7 @@ public class FileUser extends User {
 	 * Hashes a password. Source: https://www.owasp.org/index.php/Hashing_Java.
 	 *
 	 * @param password   the password
-	 * @param salt       the salt
+	 * @param salt	   the salt
 	 * @param iterations the number of iterations
 	 * @param keyLength  the length of the key
 	 * @return the hashed password
@@ -127,7 +163,7 @@ public class FileUser extends User {
 	 * Hashes a password. Source: https://www.owasp.org/index.php/Hashing_Java.
 	 *
 	 * @param password   the password
-	 * @param salt       the salt
+	 * @param salt	   the salt
 	 * @param iterations the number of iterations
 	 * @param keyLength  the length of the key
 	 * @return the hashed password
@@ -141,7 +177,7 @@ public class FileUser extends User {
 	 * Hashes a password. Source: https://www.owasp.org/index.php/Hashing_Java.
 	 *
 	 * @param password   the password
-	 * @param salt       the salt
+	 * @param salt	   the salt
 	 * @param iterations the number of iterations
 	 * @param keyLength  the length of the key
 	 * @return the hashed password
@@ -187,7 +223,7 @@ public class FileUser extends User {
 		NavigableMap<String, Role> edgeRoles = new TreeMap<>();
 		if (globalRole == Role.ADMIN) {
 			edgeRoles = edges.stream().map(e -> e.getId())
-				    .collect(Collectors.toMap(Function.identity(), e -> Role.ADMIN, (e1, e2) -> e1, TreeMap::new));
+					.collect(Collectors.toMap(Function.identity(), e -> Role.ADMIN, (e1, e2) -> e1, TreeMap::new));
 		}
 		else if (json.has("roles") && json.get("roles").isJsonObject()) {
 			JsonObject edgeRole = json.getAsJsonObject("roles");
@@ -208,12 +244,12 @@ public class FileUser extends User {
 		NavigableMap<String, Role> edgeRoles = edges
 				.stream()
 				.map(e -> e.getId())
-			    .collect(Collectors.toMap(Function.identity(), e -> Role.ADMIN, (e1, e2) -> e1, TreeMap::new));
+				.collect(Collectors.toMap(Function.identity(), e -> Role.ADMIN, (e1, e2) -> e1, TreeMap::new));
 
 		byte[] saltAsBytes = FALLBACK_SALT.getBytes(StandardCharsets.UTF_8);
-        byte[] passwordAsHash = FileUser.hashPassword(FALLBACK_PASSWORD, saltAsBytes);
-        String passwordAsBase64 = Base64.getEncoder().encodeToString(passwordAsHash);
-        String saltAsBase64 = Base64.getEncoder().encodeToString(saltAsBytes);
+		byte[] passwordAsHash = FileUser.hashPassword(FALLBACK_PASSWORD, saltAsBytes);
+		String passwordAsBase64 = Base64.getEncoder().encodeToString(passwordAsHash);
+		String saltAsBase64 = Base64.getEncoder().encodeToString(saltAsBytes);
 		return new FileUser(FALLBACK_ID, FALLBACK_NAME, passwordAsBase64, saltAsBase64, FALLBACK_LANGUAGE, Role.ADMIN, 
 				edgeRoles, new JsonObject());
 	}

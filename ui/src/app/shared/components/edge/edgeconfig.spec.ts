@@ -23,6 +23,7 @@ export namespace DummyConfig {
         lastmessage?: Date,
         sumState?: SumState,
         firstSetupProtocol?: Date,
+        settings?: Edge["settings"]
     }): Edge {
         return new Edge(
             values.edgeId ?? "edge0",
@@ -34,10 +35,11 @@ export namespace DummyConfig {
             values.lastmessage ?? new Date(),
             values.sumState ?? SumState.OK,
             values.firstSetupProtocol ?? new Date(0),
+            values.settings ?? null
         );
     }
 
-    const DUMMY_EDGE: Edge = new Edge("edge0", "", "", "2023.3.5", Role.ADMIN, true, new Date(), SumState.OK, new Date(0));
+    const DUMMY_EDGE: Edge = new Edge("edge0", "", "", "2023.3.5", Role.ADMIN, true, new Date(), SumState.OK, new Date(0), null);
     export function from(...components: Component[]): EdgeConfig {
 
         return new EdgeConfig(DUMMY_EDGE, <EdgeConfig>{
@@ -998,7 +1000,7 @@ describe("PersistencePriority", () => {
 
 describe("hasPropertyValue", () => {
 
-    const component = new EdgeConfig.Component("component0", "", true, "factoryId", {
+    const component = new EdgeConfig.Component("component0", "", true, false, "factoryId", {
         "booleanValue": true,
         "booleanValueString": "true",
         "numberValueStrng": "42",

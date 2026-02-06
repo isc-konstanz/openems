@@ -1,11 +1,9 @@
 package io.openems.edge.controller.evse.single;
 
-import static io.openems.edge.common.channel.ChannelId.channelIdUpperToCamel;
 import static io.openems.edge.common.channel.ChannelUtils.setValue;
 import static io.openems.edge.common.event.EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE;
 import static io.openems.edge.common.event.EdgeEventConstants.TOPIC_CYCLE_BEFORE_PROCESS_IMAGE;
 import static io.openems.edge.controller.evse.single.Utils.isSessionLimitReached;
-import static io.openems.edge.controller.evse.single.Utils.parseSmartConfig;
 
 import java.time.Instant;
 import java.util.function.BiConsumer;
@@ -31,6 +29,10 @@ import io.openems.edge.common.channel.value.Value;
 import io.openems.edge.common.component.AbstractOpenemsComponent;
 import io.openems.edge.common.component.ComponentManager;
 import io.openems.edge.common.component.OpenemsComponent;
+import io.openems.edge.common.jsonapi.ComponentJsonApi;
+import io.openems.edge.common.jsonapi.JSCalendarApi;
+import io.openems.edge.common.jsonapi.JSCalendarApi.UpdateJsCalendarRecord;
+import io.openems.edge.common.jsonapi.JsonApiBuilder;
 import io.openems.edge.controller.api.Controller;
 import io.openems.edge.controller.evse.single.Types.History;
 import io.openems.edge.controller.evse.single.Types.Payload;
@@ -53,7 +55,7 @@ import io.openems.edge.evse.api.electricvehicle.EvseElectricVehicle;
 		TOPIC_CYCLE_AFTER_PROCESS_IMAGE //
 })
 public class ControllerEvseSingleImpl extends AbstractOpenemsComponent
-		implements Controller, ControllerEvseSingle, OpenemsComponent, EventHandler {
+		implements Controller, ControllerEvseSingle, OpenemsComponent, EventHandler, ComponentJsonApi {
 
 	private final Logger log = LoggerFactory.getLogger(ControllerEvseSingleImpl.class);
 	private final StateMachine stateMachine = new StateMachine(State.UNDEFINED);
@@ -74,7 +76,7 @@ public class ControllerEvseSingleImpl extends AbstractOpenemsComponent
 	private EvseElectricVehicle electricVehicle;
 
 	private Config config;
-	private JSCalendar.Tasks<Payload> smartConfig;
+	private JSCalendar.Tasks<Payload> tasks;
 	private BiConsumer<Value<Boolean>, Value<Boolean>> onChargePointIsReadyForChargingChange = null;
 
 	public ControllerEvseSingleImpl() {
@@ -99,7 +101,8 @@ public class ControllerEvseSingleImpl extends AbstractOpenemsComponent
 
 	private synchronized void applyConfig(Config config) {
 		this.config = config;
-		this.smartConfig = parseSmartConfig(config.smartConfig());
+		this.tasks = JSCalendar.Tasks.fromStringOrEmpty(this.componentManager.getClock(), config.jsCalendar(),
+				Payload.serializer());
 
 		if (OpenemsComponent.updateReferenceFilter(this.cm, this.servicePid(), "chargePoint",
 				config.chargePoint_id())) {
@@ -151,7 +154,7 @@ public class ControllerEvseSingleImpl extends AbstractOpenemsComponent
 
 		return new Params(this.id(), this.config.mode(), activePower, sessionEnergy,
 				this.config.manualEnergySessionLimit(), this.history, this.config.phaseSwitching(), combinedAbilities,
-				this.smartConfig);
+				this.tasks);
 	}
 
 	@Override
@@ -160,13 +163,13 @@ public class ControllerEvseSingleImpl extends AbstractOpenemsComponent
 	}
 
 	@Override
-	public void apply(Mode.Actual actualMode, ChargePointActions input) {
+	public void apply(Mode mode, ChargePointActions input) {
 		// Set ACTUAL_MODE Channel. Always ZERO if there is no ActivePower
 		final var activePower = this.chargePoint.getActivePower().get();
 		setValue(this, ControllerEvseSingle.ChannelId.ACTUAL_MODE, //
 				activePower != null && activePower == 0 //
-						? Mode.Actual.ZERO //
-						: actualMode);
+						? Mode.ZERO //
+						: mode);
 
 		final var state = this.stateMachine.getCurrentState();
 		setValue(this, ControllerEvseSingle.ChannelId.STATE_MACHINE, state);
@@ -246,9 +249,17 @@ public class ControllerEvseSingleImpl extends AbstractOpenemsComponent
 		return switch (this.config.logVerbosity()) {
 		case NONE -> null;
 		case DEBUG_LOG -> new StringBuilder() //
-				.append("Mode:").append(channelIdUpperToCamel(this.config.mode().name())) //
+				.append("Mode:")
+				.append(this.channel(ControllerEvseSingle.ChannelId.ACTUAL_MODE).value().asOptionString()) //
 				.append("|").append(this.stateMachine.debugLog()) //
 				.toString();
 		};
+	}
+
+	@Override
+	public void buildJsonApiRoutes(JsonApiBuilder builder) {
+		JSCalendarApi.buildJsonApiRoutes(builder, Payload.serializer(), //
+				() -> this.tasks, //
+				() -> new UpdateJsCalendarRecord(this.cm, this.componentManager, this.servicePid(), "jsCalendar"));
 	}
 }

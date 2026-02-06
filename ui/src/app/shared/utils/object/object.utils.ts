@@ -28,6 +28,9 @@ export class ObjectUtils {
     }
 
     public static getKeySafely<T extends Record<string, any>, K extends keyof T>(obj: T, key: K): T[K] | null {
+        if (obj === null || obj === undefined) {
+            return null;
+        }
         return key in obj ? obj[key] : null;
     }
 
@@ -35,6 +38,12 @@ export class ObjectUtils {
         return ArrayUtils.containsAll({ strings: Object.keys(obj), arr: keys });
     }
 
+    /**
+     * Checks if a object is empty or null.
+     *
+     * @param obj the object
+     * @returns true if object is empty or null, else false
+     */
     public static isObjectNullOrEmpty(obj: Record<string, any> | null | undefined): boolean {
         return obj == null || Object.keys(obj).length === 0;
     }

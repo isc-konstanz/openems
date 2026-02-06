@@ -45,8 +45,8 @@ public final class Types {
 						json.getOptionalInt("powerStorageState").orElse(null), //
 						json.getOptionalInt("chargingPower").orElse(null), //
 						json.getObject("currentData", CurrentData.serializer()), //
-						json.getObject("availableControlModes", AvailableControlModes.serializer()), //
-						json.getObject("activeControlModes", ActiveControlModes.serializer()), //
+						json.getObjectOrNull("availableControlModes", AvailableControlModes.serializer()), //
+						json.getObjectOrNull("activeControlModes", ActiveControlModes.serializer()), //
 						json.getOptionalString("edgeId").orElse(null), //
 						json.getOptionalInt("state").orElse(null) //
 				); //
@@ -60,9 +60,12 @@ public final class Types {
 						.addProperty("powerStorageState", obj.powerStorageState) //
 						.addProperty("chargingPower", obj.chargingPower) //
 						.add("currentData", CurrentData.serializer().serialize(obj.currentData)) //
-						.add("availableControlModes",
-								AvailableControlModes.serializer().serialize(obj.availableControlModes)) //
-						.add("activeControlModes", ActiveControlModes.serializer().serialize(obj.activeControlModes)) //
+						.onlyIf(obj.availableControlModes != null, //
+								b -> b.add("availableControlModes", obj.availableControlModes,
+										AvailableControlModes.serializer())) //
+						.onlyIf(obj.activeControlModes != null, //
+								b -> b.add("activeControlModes", obj.activeControlModes,
+										ActiveControlModes.serializer())) //
 						.build();
 			});
 		}
@@ -135,7 +138,7 @@ public final class Types {
 							json.getImmutableList("ess", Ess.serializer()));
 				}, obj -> {
 					return buildJsonObject() //
-							.add("ess", Ess.serializer().toImmutableListSerializer().serialize(obj.ess)) //
+							.add("ess", obj.ess, Ess.serializer().toImmutableListSerializer()) //
 							.build();
 				});
 			}
@@ -153,7 +156,8 @@ public final class Types {
 							json.getObjectOrNull("ess", Ess.serializer()));
 				}, obj -> {
 					return buildJsonObject() //
-							.onlyIf(obj.ess != null, b -> b.add("ess", Ess.serializer().serialize(obj.ess))) //
+							.onlyIf(obj.ess != null, //
+									b -> b.add("ess", obj.ess, Ess.serializer())) //
 							.build();
 				});
 			}
@@ -171,7 +175,8 @@ public final class Types {
 							json.getObjectOrNull("ess", Ess.serializer()));
 				}, obj -> {
 					return buildJsonObject() //
-							.onlyIf(obj.ess != null, b -> b.add("ess", Ess.serializer().serialize(obj.ess))) //
+							.onlyIf(obj.ess != null, //
+									b -> b.add("ess", obj.ess, Ess.serializer())) //
 							.build();
 				});
 			}

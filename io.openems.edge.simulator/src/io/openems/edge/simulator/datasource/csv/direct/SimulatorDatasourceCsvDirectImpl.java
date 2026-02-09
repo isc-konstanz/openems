@@ -15,7 +15,7 @@ import org.osgi.service.metatype.annotations.Designate;
 import io.openems.edge.common.component.ComponentManager;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.event.EdgeEventConstants;
-import io.openems.edge.simulator.CsvUtils;
+import io.openems.edge.simulator.CsvDataContainer;
 import io.openems.edge.simulator.DataContainer;
 import io.openems.edge.simulator.datasource.api.AbstractDatasource;
 import io.openems.edge.simulator.datasource.api.SimulatorDatasource;
@@ -62,8 +62,8 @@ public class SimulatorDatasourceCsvDirectImpl extends AbstractDatasource
 	}
 
 	@Override
-	protected DataContainer getData() throws NumberFormatException, IOException {
-		return CsvUtils.parseCsv(this.config.source(), this.config.format(), this.config.factor());
+	protected DataContainer readData() throws NumberFormatException, IOException {
+		return CsvDataContainer.read(this.config.source(), this.config.format(), this.config.factor());
 	}
 
 }

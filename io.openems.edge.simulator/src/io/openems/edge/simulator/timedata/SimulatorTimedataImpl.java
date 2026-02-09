@@ -31,7 +31,7 @@ import io.openems.common.types.ChannelAddress;
 import io.openems.edge.common.component.AbstractOpenemsComponent;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.event.EdgeEventConstants;
-import io.openems.edge.simulator.CsvUtils;
+import io.openems.edge.simulator.CsvDataContainer;
 import io.openems.edge.simulator.DataContainer;
 import io.openems.edge.timedata.api.Timedata;
 import io.openems.edge.timedata.api.Timeranges;
@@ -78,7 +78,7 @@ public class SimulatorTimedataImpl extends AbstractOpenemsComponent
 			ZonedDateTime fromDate, ZonedDateTime toDate, Set<ChannelAddress> channels, Resolution resolution)
 			throws OpenemsNamedException {
 		try {
-			var data = CsvUtils.readCsvFile(this.getPath(), this.config.format(), 1);
+			var data = CsvDataContainer.readFile(this.getPath(), this.config.format(), 1);
 			SortedMap<ZonedDateTime, SortedMap<ChannelAddress, JsonElement>> result = new TreeMap<>();
 			var time = fromDate;
 			while (time.isBefore(toDate)) {
@@ -106,7 +106,7 @@ public class SimulatorTimedataImpl extends AbstractOpenemsComponent
 	public SortedMap<ChannelAddress, JsonElement> queryHistoricEnergy(String edgeId, ZonedDateTime fromDate,
 			ZonedDateTime toDate, Set<ChannelAddress> channels) throws OpenemsNamedException {
 		try {
-			var data = CsvUtils.readCsvFile(this.getPath(), this.config.format(), 1);
+			var data = CsvDataContainer.readFile(this.getPath(), this.config.format(), 1);
 			SortedMap<ChannelAddress, JsonElement> result = new TreeMap<>();
 			for (ChannelAddress channel : channels) {
 				result.put(channel, getValueAsJson(data, channel));

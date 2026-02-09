@@ -70,7 +70,7 @@ public class SimulatorDatasourceSingleChannelImpl extends AbstractDatasource
 	}
 
 	@Override
-	protected DataContainer getData() throws NumberFormatException, IOException {
+	protected DataContainer readData() throws NumberFormatException, IOException {
 		var container = new DataContainer();
 		// Initialize with default value 0
 		container.addRecord(new Float[] { 0f });

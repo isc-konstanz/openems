@@ -3,6 +3,7 @@ import { theme } from "./theme";
 
 export const environment: Environment = {
     ...theme, ...{
+
         backend: "OpenEMS Backend",
         url: `${getWebsocketScheme()}://${location.hostname}/sock/`,
 

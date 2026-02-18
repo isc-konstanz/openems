@@ -12,6 +12,65 @@ const path = require('path');
 // UPPER_SNAKE_CASE pattern
 const UPPER_SNAKE_CASE_PATTERN = /^[A-Z0-9]+(_[A-Z0-9]+)*$/;
 
+function findRedundantKeys(files) {
+    let duplicatedKeys = [];
+    let groupLangFiles = files.reduce((arr, el) => {
+        const lang = path.basename(el).toString();
+
+        if (arr[lang] == null) {
+            arr[lang] = [];
+        }
+        arr[lang].push(el);
+        return arr;
+    }, {})
+
+    for (let [lang, files] of Object.entries(groupLangFiles)) {
+        let allGroupedLang = {};
+        for (let file of files) {
+            if (allGroupedLang[lang] == null) {
+                allGroupedLang[lang] = [];
+            }
+            const content = fs.readFileSync(file, 'utf8');
+            const data = JSON.parse(content);
+            allGroupedLang[lang].push(...getStringPaths(data));
+        }
+        const duplicates = findAllDuplicateOccurrences(allGroupedLang[lang]);
+        duplicatedKeys.push({ lang: lang, duplicates: duplicates })
+    }
+
+    return duplicatedKeys;
+}
+
+function findAllDuplicateOccurrences(arr) {
+    return arr.filter((item, index) => arr.indexOf(item) !== index);
+}
+
+function getStringPaths(obj, parentPath = "", result = []) {
+    if (typeof obj !== "object" || obj === null) {
+        return result;
+    }
+
+    for (const [key, value] of Object.entries(obj)) {
+        const currentPath = parentPath ? `${parentPath}.${key}` : key;
+
+        if (typeof value === "string") {
+            // Check if string contains an object-like structure
+            const trimmed = value.trim();
+            const looksLikeObject =
+                (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+                (trimmed.startsWith("[") && trimmed.endsWith("]"));
+
+            if (!looksLikeObject) {
+                result.push(currentPath);
+            }
+        } else if (typeof value === "object" && value !== null) {
+            getStringPaths(value, currentPath, result);
+        }
+    }
+
+    return result;
+}
+
 /**
  * Recursively check all keys in a JSON object
  */
@@ -22,8 +81,6 @@ function checkKeys(obj, currentPath = '', errors = []) {
 
     for (const [key, value] of Object.entries(obj)) {
         const fullPath = currentPath ? `${currentPath}.${key}` : key;
-
-        // Check if key matches UPPER_SNAKE_CASE
         if (!UPPER_SNAKE_CASE_PATTERN.test(key)) {
             errors.push({
                 path: fullPath,
@@ -48,30 +105,8 @@ function lintFile(filePath) {
     try {
         const content = fs.readFileSync(filePath, 'utf8');
         const data = JSON.parse(content);
-
-        // Module translation files (translation.json) have language codes as top-level keys
-        // Global translation files (assets/i18n/*.json) have direct translation keys
-        const isModuleTranslation = path.basename(filePath) === 'translation.json';
-
         let errors = [];
-        if (isModuleTranslation) {
-            // For module translations, skip language code validation and check nested content
-            const languageCodes = ['de', 'en', 'es', 'fr', 'nl', 'cz', 'cs', 'ja'];
-            for (const [key, value] of Object.entries(data)) {
-                if (languageCodes.includes(key.toLowerCase())) {
-                    // Check the nested translation keys, not the language code itself
-                    checkKeys(value, '', errors);
-                } else {
-                    // If it's not a language code, validate it normally
-                    checkKeys(data, '', errors);
-                    break;
-                }
-            }
-        } else {
-            // For global translations, check all keys normally
-            errors = checkKeys(data);
-        }
-
+        checkKeys(data, '', errors);
         return { filePath, errors };
     } catch (error) {
         return {
@@ -86,26 +121,41 @@ function lintFile(filePath) {
 }
 
 /**
- * Recursively find all translation files
+ * Recursively search for folders named "i18n", starting from a directory,
+ * and excluding certain folders.
+ *
+ * @param  startDir - The directory to start searching from.
+ * @param  excludeDirs - Folder names to exclude.
+ * @returns List of found i18n folder paths.
  */
-function findTranslationFiles(dir, fileList = []) {
-    const files = fs.readdirSync(dir);
+function findAllI18nFiles(excludeDirs = ["node_modules", "dist", "build", "android"]) {
+    const foundDirectories = [];
+    const startDirectory = path.resolve("./src"); // only search in 
 
-    files.forEach(file => {
-        const filePath = path.join(dir, file);
-        const stat = fs.statSync(filePath);
+    function search(dir) {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
 
-        if (stat.isDirectory()) {
-            // Skip node_modules, target, www, and other build directories
-            if (!['node_modules', 'target', 'www', 'dist', '.angular'].includes(file)) {
-                findTranslationFiles(filePath, fileList);
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+
+            if (entry.isDirectory()) {
+                if (excludeDirs.includes(entry.name)) continue;
+
+                if (entry.name === "i18n") {
+                    foundDirectories.push(fullPath);
+                } else {
+                    search(fullPath); // recurse deeper
+                }
             }
-        } else if (file.endsWith('.json') && (file === 'translation.json' || filePath.includes(path.join('assets', 'i18n')))) {
-            fileList.push(filePath);
         }
-    });
+    }
 
-    return fileList;
+    search(startDirectory);
+    return foundDirectories
+        .map(el => fs.readdirSync(el, { withFileTypes: true }))
+        .flat()
+        .map(el => path.join(el.parentPath, el.name))
+        .filter(el => el.endsWith('.json'));
 }
 
 /**
@@ -113,8 +163,6 @@ function findTranslationFiles(dir, fileList = []) {
  */
 function main() {
     const srcDir = path.join(__dirname, '..', 'src');
-    const globalI18nDir = path.join(srcDir, 'assets', 'i18n');
-    const appDir = path.join(srcDir, 'app');
 
     // Check if source directory exists
     if (!fs.existsSync(srcDir)) {
@@ -123,7 +171,7 @@ function main() {
     }
 
     // Get all translation files (global + module-specific)
-    const files = findTranslationFiles(srcDir).sort();
+    const files = findAllI18nFiles(["node_modules", "dist", "build", ".git"]).sort();
 
     if (files.length === 0) {
         console.error('❌ No translation files found in', srcDir);
@@ -135,6 +183,7 @@ function main() {
 
     // Lint all files
     const results = files.map(lintFile);
+    const redundantKeys = findRedundantKeys(files);
     let totalErrors = 0;
 
     results.forEach(result => {
@@ -149,24 +198,34 @@ function main() {
         }
     });
 
-    console.log('\n' + '='.repeat(60));
+    const duplicates = redundantKeys.flatMap(el => el.duplicates);
+    const affectedLangs = redundantKeys.filter(el => el.duplicates.length > 0).map(el => el.lang);
+    if (duplicates.length === 0) {
+        console.log('  ✅ No redundant keys found');
+    } else {
+        console.log(`\n  ❌ Found ${duplicates.length} redundant keys in ${affectedLangs}: ${duplicates}`);
+        totalErrors += redundantKeys.length;
+    }
 
     if (totalErrors > 0) {
-        console.log(`\n❌ Linting FAILED - Found ${totalErrors} invalid key(s):\n`);
 
         results.forEach(result => {
             if (result.errors.length > 0) {
+                console.log(`\n❌ Linting FAILED - Found ${totalErrors} invalid key(s):\n`);
                 const relativePath = path.relative(srcDir, result.filePath);
+
                 console.log(`${relativePath}:`);
                 result.errors.forEach(error => {
                     console.log(`  ❌ ${error.path}: '${error.key}' is not UPPER_SNAKE_CASE`);
                 });
-                console.log('');
+                console.log('💡 All translation keys must be in UPPER_SNAKE_CASE format.');
+                console.log('   Example: GENERAL.SUM_STATE, EDGE.INDEX.WIDGETS.EVCS\n');
             }
         });
+        if (redundantKeys.length > 0) {
+            console.log('\n💡 All translation keys must be unique.');
+        }
 
-        console.log('💡 All translation keys must be in UPPER_SNAKE_CASE format.');
-        console.log('   Example: GENERAL.SUM_STATE, EDGE.INDEX.WIDGETS.EVCS\n');
         process.exit(1);
     } else {
         console.log(`\n✅ Linting PASSED - All translation keys are UPPER_SNAKE_CASE`);

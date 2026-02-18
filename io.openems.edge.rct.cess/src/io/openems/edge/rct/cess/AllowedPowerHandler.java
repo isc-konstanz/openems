@@ -13,7 +13,6 @@ import org.apache.logging.log4j.util.TriConsumer;
 import io.openems.edge.battery.api.Battery;
 import io.openems.edge.batteryinverter.api.SymmetricBatteryInverter;
 import io.openems.edge.common.component.ClockProvider;
-import io.openems.edge.common.filter.Pt1filter;
 import io.openems.edge.common.type.TypeUtils;
 
 /**
@@ -27,15 +26,9 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 
 	private final RctCess parent;
 
-	private final Pt1filter pt1FilterChargeMaxCurrentVoltageLimit;
-	private final Pt1filter pt1FilterDischargeMaxCurrentVoltageLimit;
 
 	public AllowedPowerHandler(RctCess parent) {
 		this.parent = parent;
-		this.pt1FilterChargeMaxCurrentVoltageLimit = new Pt1filter(VOLTAGE_CONTROL_FILTER_TIME_CONSTANT,
-				this.parent.getCycleTime());
-		this.pt1FilterDischargeMaxCurrentVoltageLimit = new Pt1filter(VOLTAGE_CONTROL_FILTER_TIME_CONSTANT,
-				this.parent.getCycleTime());
 	}
 
 	protected float lastAllowedBatteryChargePower;
@@ -74,7 +67,6 @@ public class AllowedPowerHandler implements TriConsumer<ClockProvider, Battery, 
 	 */
 	protected void calculateAllowedChargeDischargePower(
 			ClockProvider clockProvider, Battery battery, SymmetricBatteryInverter inverter) {
-		final var cycleTime = this.parent.getCycleTime();
 		var chargeMaxCurrent = battery.getChargeMaxCurrentChannel().getNextValue().get();
 		var dischargeMaxCurrent = battery.getDischargeMaxCurrentChannel().getNextValue().get();
 

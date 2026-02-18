@@ -1,3 +1,8 @@
+launcher.port = 8078
+launcher.host = localhost
+launcher.var = ${workspace}/cnf/backend.d/Edges
+launcher.tmp = ${workspace}/cache/backend-edges
+
 -runfw: org.apache.felix.framework;version='[7.0.5,7.0.5]'
 -runee: JavaSE-21
 -runprovidedcapabilities: ${native_capability}
@@ -5,9 +10,11 @@
 -resolve.effective: active
 
 -runproperties: \
-	org.osgi.service.http.port=8078,\
-	felix.cm.dir=c:/openems-backend-edge/config,\
-	org.apache.felix.eventadmin.Timeout=0,\
+    felix.cm.dir=${launcher.var},\
+    org.osgi.framework.storage=${launcher.tmp}, \
+	org.osgi.service.http.port=${launcher.port},\
+    org.apache.felix.http.host=${launcher.host}, \
+    org.apache.felix.eventadmin.Timeout=0, \
 	org.ops4j.pax.logging.DefaultServiceLog.level=INFO
 
 -runsystempackages: \

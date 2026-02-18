@@ -11,11 +11,18 @@ public class FileEdge extends Edge {
 	private final String apikey;
 	private final String setupPassword;
 
+	private final boolean isPublic;
+
 	public FileEdge(MetadataFile parent, String id, String apikey, String setupPassword, String comment, String version,
-			String producttype) {
+			String producttype, boolean isPublic) {
 		super(parent, id, comment, version, producttype, null);
+		this.isPublic = isPublic;
 		this.apikey = apikey;
 		this.setupPassword = setupPassword;
+	}
+
+	public boolean isPublic() {
+		return isPublic;
 	}
 
 	public String getApikey() {
@@ -33,7 +40,9 @@ public class FileEdge extends Edge {
 		String comment = JsonUtils.getAsString(json, "comment");
 		String productType = JsonUtils.getAsOptionalString(json, "type").orElse("");
 
-		return new FileEdge(parent, id, apikey, setupPassword, comment, "", productType);
+		boolean isPublic = JsonUtils.getAsOptionalBoolean(json, "public").orElse(false);
+
+		return new FileEdge(parent, id, apikey, setupPassword, comment, "", productType, isPublic);
 	}
 
 }

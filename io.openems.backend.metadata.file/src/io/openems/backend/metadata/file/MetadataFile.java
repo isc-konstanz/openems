@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -29,15 +30,16 @@ import org.osgi.service.metatype.annotations.Designate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import io.openems.backend.authentication.api.AuthUserPasswordAuthenticationService;
-import io.openems.backend.authentication.api.model.PasswordAuthenticationResult;
 import io.openems.backend.common.alerting.OfflineEdgeAlertingSetting;
 import io.openems.backend.common.alerting.SumStateAlertingSetting;
 import io.openems.backend.common.alerting.UserAlertingSettings;
+import io.openems.backend.common.edge.jsonrpc.UpdateMetadataCache;
 import io.openems.backend.common.metadata.AbstractMetadata;
+import io.openems.backend.common.metadata.AppCenterMetadata;
 import io.openems.backend.common.metadata.Edge;
 import io.openems.backend.common.metadata.EdgeHandler;
 import io.openems.backend.common.metadata.Metadata;
@@ -47,7 +49,6 @@ import io.openems.backend.common.metadata.User;
 import io.openems.common.channel.Level;
 import io.openems.common.event.EventBuilder;
 import io.openems.common.event.EventReader;
-import io.openems.common.exceptions.OpenemsError;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
 import io.openems.common.jsonrpc.request.GetEdgesRequest.PaginationOptions;
@@ -65,7 +66,8 @@ import io.openems.common.utils.JsonUtils;
  *   edges: {
  *     [edgeId: string]: {
  *       comment: string,
- *       apikey: string
+ *       type: string,
+ *       apikey: string,
  *       setuppassword?: string
  *     }
  *   }
@@ -74,7 +76,7 @@ import io.openems.common.utils.JsonUtils;
  *
  */
 @Designate(ocd = Config.class, factory = false)
-@Component(//
+@Component( //
 		name = "Metadata.File", //
 		configurationPolicy = ConfigurationPolicy.REQUIRE, //
 		immediate = true //
@@ -82,7 +84,10 @@ import io.openems.common.utils.JsonUtils;
 @EventTopics({ //
 		Edge.Events.ON_SET_CONFIG //
 })
-public class MetadataFile extends AbstractMetadata implements Metadata, AuthUserPasswordAuthenticationService, EventHandler {
+public class MetadataFile extends AbstractMetadata implements Metadata,
+		AppCenterMetadata, AppCenterMetadata.EdgeData, AppCenterMetadata.UiData, EventHandler {
+
+	private static final String MASTER_KEY = "0000-0000-0000-0000";
 
 	private final Logger log = LoggerFactory.getLogger(MetadataFile.class);
 	private final Map<String, FileUser> users = new HashMap<>();
@@ -115,31 +120,12 @@ public class MetadataFile extends AbstractMetadata implements Metadata, AuthUser
 	}
 
 	@Override
-	public CompletableFuture<PasswordAuthenticationResult> authenticateWithPassword(String username, String password) {
-		this.refreshData();
-		if (this.users.containsKey(username)) {
-			var user = this.users.get(username);
-			if (user.validatePassword(password)) {
-				CompletableFuture.completedFuture(new PasswordAuthenticationResult(username, user.getName(), user.getToken()));
-			}
-		}
-		return CompletableFuture.failedFuture(OpenemsError.COMMON_AUTHENTICATION_FAILED.exception());
-	}
-
-	@Override
-	public CompletableFuture<PasswordAuthenticationResult> authenticateWithToken(String token) {
-		this.refreshData();
-		for (FileUser user : this.users.values()) {
-			if (user.getToken().equals(token)) {
-				CompletableFuture.completedFuture(new PasswordAuthenticationResult(user.getId(), user.getName(), token));
-			}
-		}
-		return CompletableFuture.failedFuture(OpenemsError.COMMON_AUTHENTICATION_FAILED.exception());
-	}
-
-	@Override
-	public CompletableFuture<Void> logout(String token) {
-		return CompletableFuture.completedFuture(null);
+	public UpdateMetadataCache.Notification generateUpdateMetadataCacheNotification() {
+		var apikeysToEdgeIds = this.edges.values().stream()
+				.collect(Collectors.toMap(
+						e -> e.getApikey(),
+						e -> e.getId()));
+		return new UpdateMetadataCache.Notification(apikeysToEdgeIds);
 	}
 
 	@Override
@@ -173,30 +159,32 @@ public class MetadataFile extends AbstractMetadata implements Metadata, AuthUser
 	}
 
 	@Override
+	public synchronized Collection<Edge> getAllOfflineEdges() {
+		this.refreshData();
+		return this.edges.values().stream().filter(Edge::isOffline).collect(Collectors.toUnmodifiableList());
+	}
+
+	@Override
 	public CompletableFuture<User> getUserByExternalId(String userId) {
 		User user = this.getUser(userId).orElse(null);
-		if (user != null) {
-			return CompletableFuture.completedFuture(user);
+		if (user == null) {
+			user = FileUser.fallbackGuest(userId, this.edges.values());
+			users.put(userId, (FileUser) user);
 		}
-		return CompletableFuture.failedFuture(OpenemsError.COMMON_USER_UNDEFINED.exception());
+		return CompletableFuture.completedFuture(user);
 	}
 
 	@Override
 	public Optional<User> getUser(String userId) {
 		this.refreshData();
 		User user = this.users.get(userId);
+
 		return Optional.ofNullable(user);
 	}
 
 	@Override
 	public void registerUser(JsonObject jsonObject, String oem) throws OpenemsNamedException {
 		throw new UnsupportedOperationException("FileMetadata.registerUser() is not implemented");
-	}
-
-	@Override
-	public synchronized Collection<Edge> getAllOfflineEdges() {
-		this.refreshData();
-		return this.edges.values().stream().filter(Edge::isOffline).collect(Collectors.toUnmodifiableList());
 	}
 
 	@Override
@@ -208,22 +196,28 @@ public class MetadataFile extends AbstractMetadata implements Metadata, AuthUser
 	@Override
 	public void updateUserSettings(User user, JsonObject settings) throws OpenemsNamedException {
 		// TODO: Update metadata file
-		users.put(user.getId(), FileUser.fromUser((FileUser) user, settings));
+		var fileUser = this.users.get(user.getUserId());
+		users.put(user.getUserId(), FileUser.fromUser(fileUser, settings));
 	}
 
 	@Override
 	public Role getUserRole(User user, String edgeId) {
-		return ((FileUser) user).getEdgeRoles().getOrDefault(edgeId, null);
+		var fileUser = this.users.get(user.getUserId());
+		if (!fileUser.getEdges().contains(edgeId)) {
+			return null;
+		}
+		return fileUser.getGlobalRole();
 	}
 
 	@Override
 	public void addEdgeToUser(User user, Edge edge) throws OpenemsNamedException {
 		// TODO: Update metadata file
-		if (!user.hasMultipleEdges()) {
-			users.put(user.getId(), FileUser.fromUser((FileUser) user, (FileEdge) edge, Role.INSTALLER));
+		var fileUser = this.users.get(user.getUserId());
+		if (!fileUser.hasMultipleEdges()) {
+			users.put(user.getUserId(), FileUser.fromUser(fileUser, edge));
 			return;
 		}
-		((FileUser) user).setRole(edge.getId(), Role.INSTALLER);
+		fileUser.addEdge(edge.getId());
 	}
 
 	@Override
@@ -303,9 +297,99 @@ public class MetadataFile extends AbstractMetadata implements Metadata, AuthUser
 	}
 
 	@Override
-	public CompletableFuture<List<EdgeMetadata>> getPageDevice(User user, PaginationOptions paginationOptions) {
-		return CompletableFuture
-				.completedFuture(MetadataUtils.getPageDevice(user, this.edges.values(), paginationOptions));
+	public CompletableFuture<JsonObject> sendIsKeyApplicable(String key, String edgeId, String appId) {
+		// TODO: Implement app information with applicable keys to metadata
+		return CompletableFuture.completedFuture(JsonUtils.buildJsonObject() //
+				.addProperty("isKeyApplicable", true) //
+				.add("additionalInfo", JsonUtils.buildJsonObject() //
+						.addProperty("keyId", key) //
+						.add("bundles", JsonUtils.buildJsonArray() //
+								.build()) //
+						.add("registrations", JsonUtils.buildJsonArray() //
+								.build()) //
+						.add("usages", JsonUtils.buildJsonArray() //
+								.build()) //
+						.build()) //
+				.build());
+	}
+
+	@Override
+	public CompletableFuture<JsonArray> sendGetPossibleApps(String key, String edgeId) {
+		// TODO: Implement app information with applicable keys to metadata
+		if (MASTER_KEY.equals(key)) {
+			return CompletableFuture.completedFuture(JsonUtils.buildJsonArray() //
+					.add(JsonUtils.buildJsonArray() //
+							.build()) //
+					.build());
+		}
+		return CompletableFuture.completedFuture(JsonUtils.buildJsonArray() //
+				.add(JsonUtils.buildJsonArray() //
+						.build()) //
+				.build());
+	}
+
+	@Override
+	public CompletableFuture<Void> sendAddRegisterKeyHistory(String edgeId, String appId, String key, User user) {
+		return CompletableFuture.completedFuture(null);
+	}
+
+	@Override
+	public CompletableFuture<Void> sendAddUnregisterKeyHistory(String edgeId, String appId, String key, User user) {
+		return CompletableFuture.completedFuture(null);
+	}
+
+	@Override
+	public CompletableFuture<JsonArray> sendGetRegisteredKeys(String edgeId, String appId) {
+		// TODO: Implement app information with applicable keys to metadata
+		return CompletableFuture.completedFuture(JsonUtils.buildJsonArray() //
+				.add(JsonUtils.buildJsonObject() //
+						.addProperty("keyId", MASTER_KEY) //
+						.add("bundles", JsonUtils.buildJsonArray() //
+								.add(JsonUtils.buildJsonArray() //
+										.build()) //
+								.build()) //
+						.build()) //
+				.build());
+	}
+
+	@Override
+	public CompletableFuture<String> getSuppliableKey(User user, String edgeId, String appId) {
+		// TODO: Implement app information with applicable keys to metadata
+		return CompletableFuture.completedFuture(MASTER_KEY);
+	}
+
+	@Override
+	public CompletableFuture<Boolean> isAppFree(User user, String appId) {
+		return CompletableFuture.completedFuture(true);
+	}
+
+	@Override
+	public CompletableFuture<Void> sendAddInstallAppInstanceHistory(String key, String edgeId, String appId,
+			UUID instanceId, String userId) {
+		return CompletableFuture.completedFuture(null);
+	}
+
+	@Override
+	public CompletableFuture<Void> sendAddDeinstallAppInstanceHistory(String edgeId, String appId, UUID instanceId,
+			String userId) {
+		return CompletableFuture.completedFuture(null);
+	}
+
+	@Override
+	public CompletableFuture<JsonObject> sendGetInstalledApps(String edgeId) {
+		// TODO: Implement app information with installed apps to metadata
+		return CompletableFuture.completedFuture(JsonUtils.buildJsonObject() //
+				.add("installedApps", JsonUtils.buildJsonArray() //
+						.build())
+				.build());
+	}
+
+	@Override
+    public CompletableFuture<List<EdgeMetadata>> getPageDevice(User user, PaginationOptions paginationOptions) {
+		var userEdgeIds = this.users.get(user.getUserId()).getEdges();
+        var userEdges = this.edges.values()
+        		.stream().filter(e -> userEdgeIds.contains(e.getId())).collect(Collectors.toList());        
+        return CompletableFuture.completedFuture(MetadataUtils.getPageDevice(user, userEdges, paginationOptions));
 	}
 
 	@Override
@@ -314,16 +398,16 @@ public class MetadataFile extends AbstractMetadata implements Metadata, AuthUser
 		if (edge == null) {
 			return CompletableFuture.failedFuture(new OpenemsException("Unable to find edge with id [" + edgeId + "]"));
 		}
-		var edgeRole = ((FileUser) user).getRole(edgeId);
-		if (!edgeRole.isPresent()) {
+		var edgeIds = this.users.get(user.getUserId()).getEdges();
+		if (!edgeIds.contains(edgeId)) {
 			return null;
 		}
-		return CompletableFuture.completedFuture(new EdgeMetadata(//
+		return CompletableFuture.completedFuture(new EdgeMetadata( //
 				edge.getId(), //
 				edge.getComment(), //
 				edge.getProducttype(), //
 				edge.getVersion(), //
-				edgeRole.get(), //
+				user.getGlobalRole(), //
 				edge.isOnline(), //
 				edge.getLastmessage(), //
 				null, // firstSetupProtocol
@@ -402,11 +486,8 @@ public class MetadataFile extends AbstractMetadata implements Metadata, AuthUser
 				e.printStackTrace();
 				return;
 			}
-			if (users.size() == 0) {
-				users.add(FileUser.fallbackAdmin(edges));
-			}
 			for (FileUser user : users) {
-				this.users.put(user.getId(), user);
+				this.users.put(user.getUserId(), user);
 			}
 			for (FileEdge edge : edges) {
 				this.edges.put(edge.getId(), edge);

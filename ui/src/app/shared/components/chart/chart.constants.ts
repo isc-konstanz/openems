@@ -273,6 +273,7 @@ export namespace ChartConstants {
         export const DARK_GREY: string = new RGBColor(169, 169, 169).toString();
         export const BLUE_GREY: string = new RGBColor(77, 106, 130).toString();
         export const GREY: string = new RGBColor(189, 189, 189).toString();
+		export const YELLOW_GREY: string = new RGBColor(227, 206, 116).toString();
         export const LIGHT_GREY: string = new RGBColor(160, 160, 160).toString();
         export const BLACK: string = new RGBColor(0, 0, 0).toString();
 

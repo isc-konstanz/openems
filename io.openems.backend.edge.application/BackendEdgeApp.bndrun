@@ -55,6 +55,7 @@
 	io.openems.backend.common;version=snapshot,\
 	io.openems.backend.edge.application;version=snapshot;startlevel=17,\
 	io.openems.backend.metrics.prometheus;version=snapshot,\
+	io.openems.backend.smtpmailer;version=snapshot,\
 	io.openems.common;version=snapshot,\
 	io.openems.common.bridge.http;version=snapshot,\
 	io.openems.core.logger;version=snapshot;startlevel=16,\

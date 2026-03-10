@@ -1,6 +1,5 @@
 package io.openems.edge.rct.cess.charger;
 
-import static io.openems.edge.common.type.TypeUtils.divide;
 import static io.openems.edge.common.type.TypeUtils.subtract;
 import static io.openems.edge.common.type.TypeUtils.max;
 
@@ -66,7 +65,7 @@ public interface RctCessDcCharger extends
 				return;
 			}
 			charger._setVoltage(voltage);
-			charger._setCurrent(divide(power, divide(voltage, 1000)));
+			charger._setCurrent((power * 1000) / (voltage / 1000));
 		};
 		charger.getActualPowerChannel().onSetNextValue(calculateVoltageAndCurrent);
 		batteryInverter.getDcVoltageChannel().onSetNextValue(calculateVoltageAndCurrent);

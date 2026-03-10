@@ -254,8 +254,8 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 				pvPower += charger.getActualPower().orElse(0);
 			}
 			this._setPvPower(pvPower);
-			
-			dcPower -= pvPower;
+
+			dcPower = TypeUtils.subtract(dcPower, pvPower);
 		}
 		this._setDcDischargePower(dcPower);
 	}

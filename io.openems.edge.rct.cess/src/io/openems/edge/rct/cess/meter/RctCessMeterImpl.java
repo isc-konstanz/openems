@@ -17,6 +17,9 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
 import org.osgi.service.component.annotations.ReferencePolicyOption;
+import org.osgi.service.event.Event;
+import org.osgi.service.event.EventHandler;
+import org.osgi.service.event.propertytypes.EventTopics;
 import org.osgi.service.metatype.annotations.Designate;
 
 import io.openems.common.channel.AccessMode;
@@ -31,15 +34,18 @@ import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.bridge.modbus.api.ModbusProtocol;
 import io.openems.edge.bridge.modbus.api.element.DummyRegisterElement;
 import io.openems.edge.bridge.modbus.api.element.SignedWordElement;
-import io.openems.edge.bridge.modbus.api.element.UnsignedDoublewordElement;
 import io.openems.edge.bridge.modbus.api.element.UnsignedWordElement;
 import io.openems.edge.bridge.modbus.api.task.FC3ReadRegistersTask;
 import io.openems.edge.common.component.OpenemsComponent;
+import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.modbusslave.ModbusSlaveTable;
 import io.openems.edge.common.taskmanager.Priority;
 import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.meter.api.ElectricityMeter;
+import io.openems.edge.timedata.api.Timedata;
+import io.openems.edge.timedata.api.TimedataProvider;
+import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 
 @Designate(ocd = Config.class, factory = true)
 @Component(
@@ -47,14 +53,25 @@ import io.openems.edge.meter.api.ElectricityMeter;
 		immediate = true,
 		configurationPolicy = ConfigurationPolicy.REQUIRE
 )
+@EventTopics({ //
+	EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE, //
+})
 public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements RctCessMeter,
-		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave {
+		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave, EventHandler, TimedataProvider {
 
 	private MeterType meterType = MeterType.CONSUMPTION_METERED;
 	private boolean invert;
 
+	private final CalculateEnergyFromPower calculateAcConsumptionEnergy = new CalculateEnergyFromPower(this,
+			ElectricityMeter.ChannelId.ACTIVE_CONSUMPTION_ENERGY);
+	private final CalculateEnergyFromPower calculateAcProductionEnergy = new CalculateEnergyFromPower(this,
+			ElectricityMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY);
+
 	@Reference
 	private ConfigurationAdmin cm;
+
+	@Reference(policy = ReferencePolicy.DYNAMIC, policyOption = ReferencePolicyOption.GREEDY, cardinality = ReferenceCardinality.OPTIONAL)
+	private volatile Timedata timedata = null;
 
 	@Override
 	@Reference(policy = ReferencePolicy.STATIC, policyOption = ReferencePolicyOption.GREEDY, cardinality = ReferenceCardinality.MANDATORY)
@@ -92,8 +109,50 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 	}
 
 	@Override
+	public void handleEvent(Event event) {
+		if (!this.isEnabled()) {
+			return;
+		}
+		switch (event.getTopic()) {
+		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
+			this.calculateEnergy();
+			break;
+		}
+	}
+
+	private void calculateEnergy() {
+		/*
+		 * Calculate AC Energy
+		 */
+		var acActivePower = this.getActivePowerChannel().getNextValue().get();
+		if (acActivePower == null) {
+			// Not available
+			this.calculateAcConsumptionEnergy.update(null);
+			this.calculateAcProductionEnergy.update(null);
+		} else {
+			if (this.invert) {
+				acActivePower *= -1;
+			}
+			if (acActivePower > 0) {
+				// Consumption
+				this.calculateAcConsumptionEnergy.update(acActivePower);
+				this.calculateAcProductionEnergy.update(0);
+			} else {
+				// Production
+				this.calculateAcConsumptionEnergy.update(0);
+				this.calculateAcProductionEnergy.update(acActivePower * -1);
+			}
+		}
+	}
+
+	@Override
 	public MeterType getMeterType() {
 		return this.meterType;
+	}
+
+	@Override
+	public Timedata getTimedata() {
+		return this.timedata;
 	}
 
 	@Override
@@ -162,19 +221,19 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 						m(RctCessMeter.ChannelId.VOLTAGE_RATIO, new UnsignedWordElement(0x0010)),
 						m(RctCessMeter.ChannelId.CURRENT_RATIO, new UnsignedWordElement(0x0011))));
 
-		if (!this.invert) {
-			modbusProtocol.addTask(new FC3ReadRegistersTask(0x0002, Priority.LOW,
-					m(ElectricityMeter.ChannelId.ACTIVE_CONSUMPTION_ENERGY, new UnsignedDoublewordElement(0x0002),
-							chain(SCALE_FACTOR_1, multiplyByVoltageRatio(), multiplyByCurrentRatio())),
-					m(ElectricityMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY, new UnsignedDoublewordElement(0x0004),
-							chain(SCALE_FACTOR_1, multiplyByVoltageRatio(), multiplyByCurrentRatio()))));
-		} else {
-			modbusProtocol.addTask(new FC3ReadRegistersTask(0x0002, Priority.LOW,
-					m(ElectricityMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY, new UnsignedDoublewordElement(0x0004),
-							chain(SCALE_FACTOR_1, multiplyByVoltageRatio(), multiplyByCurrentRatio())),
-					m(ElectricityMeter.ChannelId.ACTIVE_CONSUMPTION_ENERGY, new UnsignedDoublewordElement(0x0002),
-							chain(SCALE_FACTOR_1, multiplyByVoltageRatio(), multiplyByCurrentRatio()))));
-		}
+//		if (!this.invert) {
+//			modbusProtocol.addTask(new FC3ReadRegistersTask(0x0002, Priority.LOW,
+//					m(ElectricityMeter.ChannelId.ACTIVE_CONSUMPTION_ENERGY, new UnsignedDoublewordElement(0x0002),
+//							chain(SCALE_FACTOR_1, multiplyByVoltageRatio(), multiplyByCurrentRatio())),
+//					m(ElectricityMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY, new UnsignedDoublewordElement(0x0004),
+//							chain(SCALE_FACTOR_1, multiplyByVoltageRatio(), multiplyByCurrentRatio()))));
+//		} else {
+//			modbusProtocol.addTask(new FC3ReadRegistersTask(0x0002, Priority.LOW,
+//					m(ElectricityMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY, new UnsignedDoublewordElement(0x0004),
+//							chain(SCALE_FACTOR_1, multiplyByVoltageRatio(), multiplyByCurrentRatio())),
+//					m(ElectricityMeter.ChannelId.ACTIVE_CONSUMPTION_ENERGY, new UnsignedDoublewordElement(0x0002),
+//							chain(SCALE_FACTOR_1, multiplyByVoltageRatio(), multiplyByCurrentRatio()))));
+//		}
 
 		return modbusProtocol;
 	}
@@ -184,10 +243,10 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 			var intValue = TypeUtils.<Integer>getAsType(OpenemsType.INTEGER, value);
 			if (intValue != null) {
 				try {
-					return intValue * this.getVoltageRatio().getOrError();
+					return intValue * this.getVoltageRatioChannel().getNextValue().getOrError();
 
 				} catch (InvalidValueException e) {
-					// CT Value not yet available
+					// PT Value not yet available
 				}
 			}
 			return null;
@@ -199,7 +258,7 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 			var intValue = TypeUtils.<Integer>getAsType(OpenemsType.INTEGER, value);
 			if (intValue != null) {
 				try {
-					return intValue * this.getCurrentRatio().getOrError();
+					return intValue * this.getCurrentRatioChannel().getNextValue().getOrError();
 
 				} catch (InvalidValueException e) {
 					// CT Value not yet available

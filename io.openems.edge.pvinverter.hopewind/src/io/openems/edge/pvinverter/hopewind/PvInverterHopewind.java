@@ -111,7 +111,7 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 				.unit(Unit.PERCENT)
 				.persistencePriority(PersistencePriority.MEDIUM)),
 
-		REACTIV_POWER_REGULATION_MODE(Doc.of(ReactivePowerLimitMode.values())
+		REACTIVE_POWER_REGULATION_MODE(Doc.of(ReactivePowerLimitMode.values())
 				.accessMode(AccessMode.READ_WRITE)
 				.text("Reactive Power Regulation Mode")
 				.persistencePriority(PersistencePriority.MEDIUM)),

@@ -120,8 +120,8 @@ public class JettyUtils {
 		try (var blocker = Blocker.callback()) {
 			response.write(true, content, blocker);
 			blocker.block();
-		} catch (Exception ignored) {
-			// best-effort: already on error path
+		} catch (Exception e) {
+			// best-effort: already on error path, ignore to avoid cascading failures
 		}
 	}
 

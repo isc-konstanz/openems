@@ -1,0 +1,17 @@
+Bundle-Name: cron-utils
+Bundle-Description: cron-utils parser and execution utilities for Java
+Bundle-DocURL: https://github.com/jmrozanec/cron-utils
+Bundle-Version: 9.2.1
+
+Include-Resource: \
+	@cron-utils-9.2.1.jar,\
+
+Export-Package: \
+	com.cronutils.*,\
+
+Import-Package: \
+	javax.validation.*;resolution:=optional,\
+	*
+
+-sources: false
+

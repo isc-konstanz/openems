@@ -1,4 +1,4 @@
-package io.openems.backend.smtpmailer;
+package io.openems.backend.mailer.smtp;
 
 import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
@@ -19,7 +19,7 @@ public @interface Config {
 	@AttributeDefinition( name = "Use STARTTLS", description = "Enable STARTTLS (recommended for port 587)")
 	boolean useStartTls() default true;
 
-	@AttributeDefinition( name = "Use SSL (SMTPS)", description = "Enable implicit SSL (usually port 465)")
+	@AttributeDefinition( name = "Use SSL", description = "Enable implicit SSL (usually port 465)")
 	boolean useSsl() default false;
 
 	@AttributeDefinition( name = "SMTP Authentication", description = "Enable SMTP authentication")
@@ -55,5 +55,5 @@ public @interface Config {
 	@AttributeDefinition( name = "Debug Mode", description = "Activates the debug mode")
 	DebugMode debugMode() default DebugMode.OFF;
 
-	String webconsole_configurationFactory_nameHint() default "Mailer.Smtp";
+	String webconsole_configurationFactory_nameHint() default "Mailer.SMTP";
 }

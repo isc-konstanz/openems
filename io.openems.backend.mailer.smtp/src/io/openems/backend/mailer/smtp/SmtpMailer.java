@@ -1,4 +1,4 @@
-package io.openems.backend.smtpmailer;
+package io.openems.backend.mailer.smtp;
 
 import static java.util.stream.Collectors.toUnmodifiableMap;
 

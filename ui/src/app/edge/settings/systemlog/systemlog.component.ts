@@ -147,9 +147,8 @@ export class SystemLogComponent implements OnInit, OnDestroy {
 
                     if (!component) {
                         this.isCondensedOutput = null;
-                    }
 
-                    if (component.properties?.condensedOutput != null) {
+                    } else if (component.properties?.condensedOutput != null) {
                         this.isCondensedOutput = component.properties?.condensedOutput;
                     }
                 });

@@ -1,5 +1,6 @@
 package io.openems.edge.core.host;
 
+import static io.openems.common.utils.JsonUtils.prettyToString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -9,6 +10,9 @@ import java.net.InetAddress;
 
 import org.junit.Before;
 import org.junit.Test;
+
+import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
+import io.openems.common.utils.JsonUtils;
 
 public class NetworkInterfaceTest {
 
@@ -67,6 +71,74 @@ public class NetworkInterfaceTest {
 				inet4AddressWithNetmask.isInSameNetwork(Inet4AddressWithSubnetmask.fromString("", "192.168.178.2/24")));
 		assertFalse(
 				inet4AddressWithNetmask.isInSameNetwork(Inet4AddressWithSubnetmask.fromString("", "192.168.179.2/24")));
+	}
+
+	@Test
+	public void testJsonRoundtripDhcpWithLabelledAddress() throws OpenemsNamedException {
+		assertJsonRoundtrip("eth0", """
+				{
+				  "dhcp": true,
+				  "linkLocalAddressing": true,
+				  "addresses": [
+				    {
+				      "label": "normal",
+				      "address": "192.168.100.100",
+				      "subnetmask": "255.255.255.0"
+				    }
+				  ]
+				}""");
+	}
+
+	@Test
+	public void testJsonRoundtripStaticWithGatewayAndMetric() throws OpenemsNamedException {
+		assertJsonRoundtrip("eth0", """
+				{
+				  "dhcp": false,
+				  "linkLocalAddressing": true,
+				  "gateway": "10.4.0.2",
+				  "metric": 520,
+				  "dns": "8.8.8.8",
+				  "addresses": [
+				    {
+				      "label": "",
+				      "address": "192.168.100.100",
+				      "subnetmask": "255.255.255.0"
+				    }
+				  ]
+				}""");
+	}
+
+	@Test
+	public void testJsonRoundtripIsStableForMultipleAddresses() throws OpenemsNamedException {
+		// Set iteration order is implementation-defined, so instead of pinning the
+		// exact output, we assert that two successive round-trips produce identical
+		// JSON. i.e. the serializer is a fixed point.
+		var input = JsonUtils.parse("""
+				{
+				  "dhcp": false,
+				  "gateway": "10.4.0.2",
+				  "addresses": [
+				    { "label": "", "address": "192.168.100.100", "subnetmask": "255.255.255.0" },
+				    { "label": "", "address": "10.4.0.1", "subnetmask": "255.255.255.0" }
+				  ]
+				}""");
+		var once = NetworkInterface.from("eth0", input).toJson();
+		var twice = NetworkInterface.from("eth0", once).toJson();
+		assertEquals(prettyToString(once), prettyToString(twice));
+	}
+
+	@Test
+	public void testJsonRoundtripWildcardName() throws OpenemsNamedException {
+		assertJsonRoundtrip("enx*", """
+				{
+				  "dhcp": true
+				}""");
+	}
+
+	private static void assertJsonRoundtrip(String name, String prettyJson) throws OpenemsNamedException {
+		var json = JsonUtils.parse(prettyJson);
+		var iface = NetworkInterface.from(name, json);
+		assertEquals(prettyJson, prettyToString(iface.toJson()));
 	}
 
 }

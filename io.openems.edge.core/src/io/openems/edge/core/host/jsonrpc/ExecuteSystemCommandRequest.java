@@ -36,13 +36,27 @@ public class ExecuteSystemCommandRequest extends JsonrpcRequest {
 	/**
 	 * Holds common parameters for a {@link SystemCommand}.
 	 */
-	public static record SystemCommand(String command, boolean runInBackground, int timeoutSeconds,
-			Optional<String> username, Optional<String> password) {
+	public static record SystemCommand(String command, boolean runInBackground, boolean requireRootPrivileges,
+			int timeoutSeconds, Optional<String> username, Optional<String> password) {
+
+	    public SystemCommand(String command, boolean runInBackground, int timeoutSeconds,
+	    		Optional<String> username, Optional<String> password) {
+	        this(command, runInBackground, false, timeoutSeconds, username, password);
+	    }
+
+	    public SystemCommand(String command, boolean runInBackground, boolean requireRootPrivileges, int timeoutSeconds) {
+	        this(command, runInBackground, requireRootPrivileges, timeoutSeconds, Optional.empty(), Optional.empty());
+	    }
+
+	    public SystemCommand(String command, boolean runInBackground, int timeoutSeconds) {
+	        this(command, runInBackground, false, timeoutSeconds, Optional.empty(), Optional.empty());
+	    }
 
 		private JsonObject toJsonObject() {
 			var result = JsonUtils.buildJsonObject() //
 					.addProperty("command", this.command) //
 					.addProperty("runInBackground", this.runInBackground) //
+					.addProperty("requireRootPrivileges", this.requireRootPrivileges) //
 					.addProperty("timeoutSeconds", this.timeoutSeconds); //
 			if (this.username.isPresent()) {
 				result.addProperty("username", this.username.get()); //
@@ -82,7 +96,7 @@ public class ExecuteSystemCommandRequest extends JsonrpcRequest {
 	 */
 	public static ExecuteSystemCommandRequest runInBackgroundWithoutAuthentication(String command) {
 		return new ExecuteSystemCommandRequest(UUID.randomUUID(),
-				new SystemCommand(command, true, 0, Optional.empty(), Optional.empty()));
+				new SystemCommand(command, true, 0));
 	}
 
 	/**
@@ -97,7 +111,22 @@ public class ExecuteSystemCommandRequest extends JsonrpcRequest {
 	public static ExecuteSystemCommandRequest withoutAuthentication(String command, boolean runInBackground,
 			int timeoutSeconds) {
 		return new ExecuteSystemCommandRequest(UUID.randomUUID(),
-				new SystemCommand(command, runInBackground, timeoutSeconds, Optional.empty(), Optional.empty()));
+				new SystemCommand(command, runInBackground, timeoutSeconds));
+	}
+
+	/**
+	 * Factory with root privileges required.
+	 *
+	 * @param command         the command
+	 * @param runInBackground run the command in background (true) or in foreground
+	 *                        (false)
+	 * @param timeoutSeconds  interrupt the command after ... seconds
+	 * @return the {@link ExecuteSystemCommandRequest}
+	 */
+	public static ExecuteSystemCommandRequest withRootPrivileges(String command, boolean runInBackground,
+			int timeoutSeconds) {
+		return new ExecuteSystemCommandRequest(UUID.randomUUID(),
+				new SystemCommand(command, runInBackground, true, timeoutSeconds));
 	}
 
 	public final SystemCommand systemCommand;
@@ -105,6 +134,11 @@ public class ExecuteSystemCommandRequest extends JsonrpcRequest {
 	public ExecuteSystemCommandRequest(String command, boolean runInBackground, int timeoutSeconds,
 			Optional<String> username, Optional<String> password) {
 		this(UUID.randomUUID(), new SystemCommand(command, runInBackground, timeoutSeconds, username, password));
+	}
+
+	public ExecuteSystemCommandRequest(String command, boolean runInBackground, int timeoutSeconds,
+			boolean requireRootPrivileges) {
+		this(UUID.randomUUID(), new SystemCommand(command, runInBackground, requireRootPrivileges, timeoutSeconds));
 	}
 
 	public ExecuteSystemCommandRequest(UUID id, SystemCommand systemCommand) {

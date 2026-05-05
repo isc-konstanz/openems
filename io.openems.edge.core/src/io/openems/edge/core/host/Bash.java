@@ -22,6 +22,8 @@ import io.openems.common.utils.StringUtils;
 
 final class Bash {
 
+	private static final String ROOT = "root";
+	private static final String USER = System.getProperty("user.name");
 	private static final Logger LOG = LoggerFactory.getLogger(Bash.class);
 	private static final ExecutorService EXECUTOR = Executors
 			.newThreadPerTaskExecutor(Thread.ofVirtual().name("Bash").factory());
@@ -35,6 +37,7 @@ final class Bash {
 	private String password;
 	private String username;
 	private boolean runInBackground;
+	private boolean requireRootPrivileges;
 
 	public Bash(String command) {
 		this.command = command;
@@ -42,6 +45,7 @@ final class Bash {
 		this.timeoutSeconds = 10;
 		this.password = null;
 		this.username = null;
+		this.requireRootPrivileges = false;
 	}
 
 	public Bash withTimeout(int timeoutSeconds) {
@@ -50,8 +54,13 @@ final class Bash {
 	}
 
 	public Bash withSudo(String username, String password) {
-		this.username = username;
+		return this.withSudo(username, password, false);
+	}
+
+	public Bash withSudo(String username, String password, boolean require) {
+		this.username = !StringUtils.isNullOrBlank(username) ? username : USER;
 		this.password = password;
+		this.requireRootPrivileges = require;
 		return this;
 	}
 
@@ -70,7 +79,7 @@ final class Bash {
 	 * @return a future with the result of the command execution
 	 */
 	public CompletableFuture<Command> execute() {
-		final String[] cmd = toBashCommand(this.command, this.username, this.password);
+		final String[] cmd = toBashCommand(this.command, this.username, this.password, this.requireRootPrivileges);
 		final int timeout = this.runInBackground ? -1 : this.timeoutSeconds;
 
 		final var future = executeCommand(this.command, cmd, timeout);
@@ -91,7 +100,8 @@ final class Bash {
 				"Check system logs for more information."), List.of()));
 	}
 
-	private static String[] toBashCommand(String command, String username, String password) {
+	private static String[] toBashCommand(String command, String username, String password,
+			boolean requireRootPrivileges) {
 		final List<String> cmd = new ArrayList<>();
 		cmd.add("/bin/bash");
 		cmd.add("-c");
@@ -99,11 +109,16 @@ final class Bash {
 		String login = "";
 
 		if (!StringUtils.isNullOrBlank(password)) {
+			// Authenticate with password via sudo -S
 			login = "echo " + password + " | /usr/bin/sudo -Sk -p '' ";
 			if (!StringUtils.isNullOrBlank(username)) {
 				login += " -u '" + username + "' ";
 			}
 			login += "-- ";
+		} else if (!StringUtils.isNullOrBlank(username) && !username.equals(ROOT) && requireRootPrivileges) {
+			// No password provided but admin privileges required and not already root,
+			// attempt passwordless sudo via /etc/sudoers.d/
+			login = "/usr/bin/sudo ";
 		}
 		cmd.add(login + command);
 		return cmd.toArray(new String[cmd.size()]);

@@ -7,7 +7,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -114,15 +113,6 @@ public class SystemUpdateHandler {
 		}
 	}
 
-	private CompletableFuture<ExecuteSystemCommandResponse> executeSystemCommand(String command, int timeoutSeconds)
-			throws OpenemsNamedException {
-		final var runInBackground = false;
-		final Optional<String> username = Optional.empty();
-		final Optional<String> password = Optional.empty();
-		return this.parent.operatingSystem.handleExecuteSystemCommandRequest(
-				new ExecuteSystemCommandRequest(command, runInBackground, timeoutSeconds, username, password));
-	}
-
 	/**
 	 * Handles a {@link ExecuteSystemUpdateRequest} and makes sure the update is
 	 * executed only once.
@@ -165,20 +155,24 @@ public class SystemUpdateHandler {
 		final var params = this.parent.oem.getSystemUpdateParams();
 		Path logFile = null;
 		Path scriptFile = null;
+		String scriptFileUrl = params.updateScriptPath();
+		float totalNumberOfLines = 0;
 		try {
 			logFile = Files.createTempFile("system-update-log-", null);
 			this.updateState.addLog("# Creating Logfile [" + logFile + "]");
 
-			// Download Update Script to temporary file
-			this.updateState.addLog("# Downloading update script " //
-					+ "[" + params.updateScriptUrl() + "]");
-			scriptFile = Files.createTempFile("system-update-script-", null);
-			var script = //
-					"export PS4='" + MARKER_BASH_TRACE + "${LINENO} '; \n" //
-							+ this.download(params.updateScriptUrl());
-			Files.write(scriptFile, script.getBytes(StandardCharsets.US_ASCII));
+			if (scriptFileUrl != null) {
+				// Download Update Script to temporary file
+				this.updateState.addLog("# Downloading update script " //
+						+ "[" + params.updateScriptPath() + "]");
+				scriptFile = Files.createTempFile("system-update-script-", null);
+				var script = //
+						"export PS4='" + MARKER_BASH_TRACE + "${LINENO} '; \n" //
+								+ this.download(params.updateScriptPath());
+				Files.write(scriptFile, script.getBytes(StandardCharsets.US_ASCII));
 
-			final float totalNumberOfLines = script.split("\r\n|\r|\n").length;
+				totalNumberOfLines = script.split("\r\n|\r|\n").length;
+			}
 
 			// Make sure 'at' command is available
 			if (this.executeSystemCommand("which at", SHORT_TIMEOUT).get().scr.stdout().isEmpty()) {
@@ -186,7 +180,7 @@ public class SystemUpdateHandler {
 
 				{
 					this.updateState.addLog("# Executing 'apt-get update'");
-					var response = this.executeSystemCommand("apt-get update", 3600).get();
+					var response = this.executeAdminCommand("apt-get update", 3600).get();
 					this.updateState.addLog("'apt-get update'", response);
 					if (response.scr.exitcode() != 0) {
 						throw new Exception("'apt-get update' failed");
@@ -194,7 +188,7 @@ public class SystemUpdateHandler {
 				}
 				{
 					this.updateState.addLog("# Executing 'apt-get install at'");
-					var response = this.executeSystemCommand("apt-get -y install at", 3600).get();
+					var response = this.executeAdminCommand("apt-get -y install at", 3600).get();
 					this.updateState.addLog("'apt-get install at'", response);
 					if (response.scr.exitcode() != 0) {
 						throw new Exception("'apt-get install at' failed");
@@ -203,7 +197,7 @@ public class SystemUpdateHandler {
 			}
 
 			// Execute Update Script
-			{
+			if (scriptFile != null) {
 				this.updateState.addLog("# Executing update script [" + scriptFile + "]");
 				var response = this.executeSystemCommand("echo '" //
 						+ "  {" //
@@ -285,4 +279,19 @@ public class SystemUpdateHandler {
 			}
 		}
 	}
+
+	private CompletableFuture<ExecuteSystemCommandResponse> executeSystemCommand(String command, int timeoutSeconds)
+			throws OpenemsNamedException {
+		final var runInBackground = false;
+		return this.parent.operatingSystem.handleExecuteSystemCommandRequest(
+				ExecuteSystemCommandRequest.withoutAuthentication(command, runInBackground, timeoutSeconds));
+	}
+
+	private CompletableFuture<ExecuteSystemCommandResponse> executeAdminCommand(String command, int timeoutSeconds)
+			throws OpenemsNamedException {
+		final var runInBackground = false;
+		return this.parent.operatingSystem.handleExecuteSystemCommandRequest(
+				ExecuteSystemCommandRequest.withRootPrivileges(command, runInBackground, timeoutSeconds));
+	}
+
 }

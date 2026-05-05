@@ -92,8 +92,8 @@ public interface OpenemsEdgeOem {
 		return "edge";
 	}
 
-	public record SystemUpdateParams(String packageName, String latestVersionUrl, String updateScriptUrl,
-			String updateScriptParams) {
+	public record SystemUpdateParams(String packageName, String latestVersionUrl,
+			String updateScriptPath, String updateScriptParams) {
 	}
 
 	/**

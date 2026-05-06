@@ -1,5 +1,7 @@
 package io.openems.edge.rct.cess;
 
+import static io.openems.common.utils.IntUtils.maxInteger;
+import static io.openems.common.utils.IntUtils.minInteger;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static io.openems.edge.bridge.modbus.api.ElementToChannelConverter.SCALE_FACTOR_2;
 import static io.openems.edge.common.cycle.Cycle.DEFAULT_CYCLE_TIME;
@@ -306,7 +308,7 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 		var constraints = this.getBatteryInverter().getStaticConstraints();
 
 		for (var c : constraints) {
-			result.add(this.getPower().createSimpleConstraint(c.description, this, c.phase, c.pwr, c.relationship, c.value));
+			result.add(this.getPower().createSimpleConstraint(c.description(), this, c.phase(), c.pwr(), c.relationship(), c.value()));
 		}
 
 		// If the GenericEss is not in State "STARTED" block ACTIVE and REACTIVE Power!
@@ -447,10 +449,10 @@ public class RctCessImpl extends AbstractOpenemsModbusComponent implements
 		// Show max AC export/import active power:
 		// Minimum of MaxAllowedCharge/DischargePower and MaxApparentPower
 		builder.append("|Allowed:")
-				.append(TypeUtils.max(
+				.append(maxInteger(
 						this.getAllowedChargePower().get(), TypeUtils.multiply(this.getMaxApparentPower().get(), -1)))
 				.append(";")
-				.append(TypeUtils.min(
+				.append(minInteger(
 						this.getAllowedDischargePower().get(), this.getMaxApparentPower().get()));
 
 		builder.append("|").append(this.getGridModeChannel().value().asOptionString());

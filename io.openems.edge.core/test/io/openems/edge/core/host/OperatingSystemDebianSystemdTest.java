@@ -177,7 +177,7 @@ public class OperatingSystemDebianSystemdTest {
 
 	@Test
 	public void testStaticWithDnsAndMetric() throws OpenemsNamedException {
-		var networkd = parseSystemdNetworkdConfigurationFile("""
+		var nd = parseSystemdNetworkdConfigurationFile("""
 				[Network]
 				DHCP=no
 				DNS=10.0.0.1

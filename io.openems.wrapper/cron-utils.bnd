@@ -1,6 +1,7 @@
 Bundle-Name: cron-utils
-Bundle-Description: cron-utils parser and execution utilities for Java
+Bundle-Description: Cron parser and execution utilities for Java
 Bundle-DocURL: https://github.com/jmrozanec/cron-utils
+Bundle-License: https://opensource.org/license/apache-2.0
 Bundle-Version: 9.2.1
 
 Include-Resource: \
@@ -14,4 +15,3 @@ Import-Package: \
 	*
 
 -sources: false
-

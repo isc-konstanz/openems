@@ -134,13 +134,13 @@ public class RctCessMeterImpl extends AbstractOpenemsModbusComponent implements 
 				acActivePower *= -1;
 			}
 			if (acActivePower > 0) {
-				// Consumption
-				this.calculateAcConsumptionEnergy.update(acActivePower);
-				this.calculateAcProductionEnergy.update(0);
-			} else {
-				// Production
+				// Import-from-grid
 				this.calculateAcConsumptionEnergy.update(0);
 				this.calculateAcProductionEnergy.update(acActivePower * -1);
+			} else {
+				// Export-to-Grid
+				this.calculateAcConsumptionEnergy.update(acActivePower);
+				this.calculateAcProductionEnergy.update(0);
 			}
 		}
 	}

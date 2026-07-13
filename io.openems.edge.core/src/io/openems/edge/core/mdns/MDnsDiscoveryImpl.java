@@ -2,7 +2,9 @@ package io.openems.edge.core.mdns;
 
 import static java.util.stream.Collectors.toMap;
 
+import java.io.IOException;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -26,20 +28,41 @@ import io.openems.edge.common.mdns.MDnsDiscovery;
 @Component
 public class MDnsDiscoveryImpl implements MDnsDiscovery {
 
+	private final Logger log = LoggerFactory.getLogger(MDnsDiscoveryImpl.class);
+
 	private JmDNS jmDns;
 
 	@Activate
-	private void activate() throws Exception {
-		this.jmDns = JmDNS.create(InetAddress.getLocalHost());
+	private void activate() {
+		InetAddress addr;
+		try {
+			addr = InetAddress.getLocalHost();
+
+		} catch (UnknownHostException e) {
+			this.log.warn("Cannot resolve local host for mDNS, falling back to loopback: {}", e.getMessage());
+			addr = InetAddress.getLoopbackAddress();
+		}
+		try {
+			this.jmDns = JmDNS.create(addr);
+
+		} catch (IOException e) {
+			this.log.error("Failed to start mDNS discovery", e);
+		}
 	}
 
 	@Deactivate
 	private void deactivate() throws Exception {
-		this.jmDns.close();
+		if (this.jmDns != null) {
+			this.jmDns.close();
+		}
 	}
 
 	@Override
 	public AutoCloseable subscribeService(String serviceType, Consumer<MDnsEvent> onChange) {
+		if (this.jmDns == null) {
+			return () -> {
+			};
+		}
 		final var listener = new MDnsDiscoveryListener(event -> {
 			if (event instanceof MDnsEvent.ServiceAdded) {
 				this.jmDns.requestServiceInfo(serviceType, event.serviceName(), 0);
@@ -55,6 +78,10 @@ public class MDnsDiscoveryImpl implements MDnsDiscovery {
 
 	@Override
 	public AutoCloseable subscribeService(String serviceType, String serviceName, Consumer<MDnsEvent> onChange) {
+		if (this.jmDns == null) {
+			return () -> {
+			};
+		}
 		final var listener = new MDnsDiscoveryListener(event -> {
 			if (!event.serviceName().equals(serviceName)) {
 				return;

@@ -1,6 +1,7 @@
 package io.openems.edge.controller.symmetric.peakshaving;
 
 import static io.openems.edge.ess.api.ManagedSymmetricEss.ChannelId.SET_ACTIVE_POWER_EQUALS;
+import static io.openems.edge.ess.api.ManagedSymmetricEss.ChannelId.SET_ACTIVE_POWER_GREATER_OR_EQUALS;
 
 import org.junit.Test;
 
@@ -85,6 +86,11 @@ public class ControllerEssPeakShavingImplTest {
 						.input("ess0", SymmetricEss.ChannelId.ACTIVE_POWER, 20377) //
 						.input("meter0", ElectricityMeter.ChannelId.ACTIVE_POWER, 120000 - 20377) //
 						.output("ess0", SET_ACTIVE_POWER_EQUALS, 19767)) //
+				.next(new TestCase() //
+						.input("ess0", SymmetricEss.ChannelId.ACTIVE_POWER, 0) //
+						.input("meter0", ElectricityMeter.ChannelId.ACTIVE_POWER, 70000) //
+						.output("ess0", SET_ACTIVE_POWER_GREATER_OR_EQUALS, 70000 - 100000) //
+						.output("ess0", SET_ACTIVE_POWER_EQUALS, null)) //
 				.deactivate();
 	}
 

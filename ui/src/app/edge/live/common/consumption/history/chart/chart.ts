@@ -74,15 +74,15 @@ export class ChartComponent extends AbstractHistoryChart {
                     converter: () => {
                         return data["ConsumptionActivePower"] ?? null;
                     },
-                    color: ChartConstants.Colors.YELLOW,
+                    color: ChartConstants.Colors.CONSUMPTION,
                     stack: 0,
                 });
 
-                const evcsComponentColors: string[] = ChartConstants.Colors.SHADES_OF_GREEN;
+                const evcsComponentColors: string[] = ChartConstants.Colors.SHADES_OF_EV_CHARGE;
                 datasets.push(
                     ...evcsComponents.map((evcs, index) =>
                         evcs.getChartDisplayValue(data, evcsComponentColors[index % (evcsComponentColors.length - 1)])));
-                const heatComponentColors: string[] = ChartConstants.Colors.SHADES_OF_GREEN;
+                const heatComponentColors: string[] = ChartConstants.Colors.SHADES_OF_HEAT;
                 heatComponents.forEach((component, index) => {
                     datasets.push({
                         name: component.alias,
@@ -97,7 +97,7 @@ export class ChartComponent extends AbstractHistoryChart {
                     });
                 });
 
-                const consumptionMeterColors: string[] = ChartConstants.Colors.SHADES_OF_YELLOW;
+                const consumptionMeterColors: string[] = ChartConstants.Colors.SHADES_OF_CONSUMPTION;
                 consumptionMeters.forEach((meter, index) => {
                     datasets.push({
                         name: meter.alias,

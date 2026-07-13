@@ -66,7 +66,7 @@ export class SchedulePowerAndSocChartComponent extends AbstractHistoryChart impl
                     name: this.translate.instant("GENERAL.GRID_SELL"),
                     converter: () => data["gridSell"] ?? [],
                     yAxisId: ChartAxis.LEFT,
-                    color: ChartConstants.Colors.PURPLE,
+                    color: ChartConstants.Colors.GRID_SELL,
                     stack: 0,
                     order: 1,
                     hiddenOnInit: true,

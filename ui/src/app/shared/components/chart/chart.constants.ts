@@ -38,13 +38,13 @@ export namespace ChartConstants {
             };
 
             /**
-       * Enhances the hover effect
-       *
-       * @info increases currently selected datapoints by increasing their radius
-       *
-       * @param color the color of the dataset
-       * @returns chartjs dataset options
-       */
+             * Enhances the hover effect
+             *
+             * @info increases currently selected datapoints by increasing their radius
+             *
+             * @param color the color of the dataset
+             * @returns chartjs dataset options
+             */
             public static HOVER_ENHANCE = (color: ChartTypes.Color) => ({
                 pointHoverRadius: 2,
                 pointHoverBorderWidth: 5,
@@ -96,25 +96,24 @@ export namespace ChartConstants {
             };
         };
 
-
         /**
-     * Places the yAxis above the chart
-     *
-     * @param id the chart axis id
-     * @returns plugin applied features
-     */
+         * Places the yAxis above the chart
+         *
+         * @param id the chart axis id
+         * @returns plugin applied features
+         */
         public static readonly YAXIS_TITLE_POSITION = (id: ChartAxis) => {
             return ({
                 id: id,
                 afterDraw(chart, args, options: ChartOptions) {
 
                     /**
-           * Calculates the ticks width
-           *
-           * @param currentScale the current scale
-           * @param ctx the canvas rendering context
-           * @returns the ticks width
-           */
+                     * Calculates the ticks width
+                     *
+                     * @param currentScale the current scale
+                     * @param ctx the canvas rendering context
+                     * @returns the ticks width
+                     */
                     function calculateTicksWidth(currentScale, ctx): number {
                         let maxTickWidth = 0;
                         currentScale?.ticks?.forEach(tick => {
@@ -128,21 +127,21 @@ export namespace ChartConstants {
                     }
 
                     /**
-           * Checks if current axis is left axis
-           *
-           * @param left the margin to the left
-           * @returns true, if left axis
-          */
+                     * Checks if current axis is left axis
+                     *
+                     * @param left the margin to the left
+                     * @returns true, if left axis
+                     */
                     function isLeftAxis(left: number) {
                         return left <= 100;
                     }
 
                     /**
-           * Calculates the x position for the y axis title
-           *
-           * @param scale the current scale
-           * @returns the horizontally centered position for the y axis title
-          */
+                     * Calculates the x position for the y axis title
+                     *
+                     * @param scale the current scale
+                     * @returns the horizontally centered position for the y axis title
+                     */
                     function calculateXPositionForTitle(chart, totalScaleWidth, scale: string): number {
                         const rightAxes = [ChartAxis.RIGHT, ChartAxis.RIGHT_2].filter(axis => {
                             const scale = chart.scales[axis];
@@ -224,11 +223,11 @@ export namespace ChartConstants {
         });
 
         /**
-     * Configuration for plugin {@link ChartDataLabels ChartDataLabels}
-     *
-     * @param unit the unit to display
-     * @returns plugin configuration for {@link ChartDataLabels ChartDataLabels-plugin}
-     */
+         * Configuration for plugin {@link ChartDataLabels ChartDataLabels}
+         *
+         * @param unit the unit to display
+         * @returns plugin configuration for {@link ChartDataLabels ChartDataLabels-plugin}
+         */
         public static readonly BAR_CHART_DATALABELS = (unit: string, disable: boolean): any => ({
             ...ChartDataLabels,
             color: getComputedStyle(document.documentElement).getPropertyValue("--ion-color-text"),
@@ -261,30 +260,42 @@ export namespace ChartConstants {
         };
     }
 
+    export class Colors {
 
-    export namespace Colors {
+        public static readonly LEGEND_LABEL_BG_OPACITY: number = 0.2;
 
-        export const LEGEND_LABEL_BG_OPACITY: number = 0.2;
-        export const BLUE: string = new RGBColor(54, 174, 209).toString();
-        export const RED: string = new RGBColor(255, 98, 63).toString();
-        export const GREEN: string = new RGBColor(14, 190, 84).toString();
-        export const ORANGE: string = new RGBColor(234, 147, 45).toString();
-        export const PURPLE: string = new RGBColor(91, 92, 214).toString();
-        export const YELLOW: string = new RGBColor(255, 206, 0).toString();
-        export const TURQUOISE: string = new RGBColor(0, 204, 204).toString();
-        export const DARK_GREY: string = new RGBColor(169, 169, 169).toString();
-        export const BLUE_GREY: string = new RGBColor(77, 106, 130).toString();
-        export const GREY: string = new RGBColor(189, 189, 189).toString();
-		export const YELLOW_GREY: string = new RGBColor(227, 206, 116).toString();
-        export const LIGHT_GREY: string = new RGBColor(160, 160, 160).toString();
-        export const BLACK: string = new RGBColor(0, 0, 0).toString();
+        public static readonly BLUE: string = new RGBColor(54, 174, 209).toString();
+        public static readonly RED: string = new RGBColor(255, 98, 63).toString();
+        public static readonly GREEN: string = new RGBColor(14, 190, 84).toString();
+        public static readonly ORANGE: string = new RGBColor(234, 147, 45).toString();
+        public static readonly YELLOW: string = new RGBColor(255, 206, 0).toString();
+        public static readonly BLUE_GREY: string = new RGBColor(77, 106, 130).toString();
+        public static readonly DARK_GREY: string = new RGBColor(169, 169, 169).toString();
+        public static readonly GREY: string = new RGBColor(189, 189, 189).toString();
+        public static readonly BLACK: string = new RGBColor(0, 0, 0).toString();
 
-        export const SHADES_OF_GREEN: string[] = [GREEN, "rgb(11,152,67)", "rgb(8,114,50)", "rgb(6,76,34)", "rgb(3,38,17)"];
-        export const SHADES_OF_GREY: string[] = ["rgb(215,211,211)", "rgb(168,169,173)", "rgb(125,125,125)"];
-        export const SHADES_OF_RED: string[] = [RED, "rgb(204,78,50)", "rgb(153,59,38)", "rgb(102,39,25)", "rgb(51,20,13)"];
-        export const SHADES_OF_YELLOW: string[] = [YELLOW, "rgb(204,165,0)", "rgb(153,124,0)", "rgb(102,82,0)", "rgb(255,221,77)"];
+        public static get CONSUMPTION(): string { return cssRgb("--ion-color-consumption-rgb"); }
+        public static get PRODUCTION(): string { return cssRgb("--ion-color-production-rgb"); }
+        public static get STORAGE(): string { return cssRgb("--ion-color-storage-rgb"); }
+        public static get STORAGE_CHARGE(): string { return cssRgb("--ion-color-storage-charge-rgb"); }
+        public static get STORAGE_DISCHARGE(): string { return cssRgb("--ion-color-storage-discharge-rgb"); }
+        public static get EV_CHARGE(): string { return cssRgb("--ion-color-ev-charge-rgb"); }
+        public static get GRID_BUY(): string { return cssRgb("--ion-color-grid-buy-rgb"); }
+        public static get GRID_SELL(): string { return cssRgb("--ion-color-grid-sell-rgb"); }
+        public static get PHASE_L1(): string { return cssRgb("--ion-color-phase-l1-rgb"); }
+        public static get PHASE_L2(): string { return cssRgb("--ion-color-phase-l2-rgb"); }
+        public static get PHASE_L3(): string { return cssRgb("--ion-color-phase-l3-rgb"); }
+        public static get LIMIT(): string { return cssRgb("--ion-color-limit-rgb"); }
+        public static get HEAT(): string { return cssRgb("--ion-color-heat-rgb"); }
 
-        export const DEFAULT_PHASES_COLORS: string[] = ["rgb(255,127,80)", "rgb(91, 92, 214)", "rgb(128,128,0)"];
+        public static get SHADES_OF_EV_CHARGE(): string[] { return shadesOf(Colors.EV_CHARGE, 5); }
+        public static get SHADES_OF_HEAT(): string[] { return shadesOf(Colors.HEAT, 5); }
+        public static get SHADES_OF_CONSUMPTION(): string[] { return shadesOf(Colors.CONSUMPTION, 5); }
+        public static get SHADES_OF_PRODUCTION(): string[] { return shadesOf(Colors.PRODUCTION, 5); }
+
+        public static get DEFAULT_PHASES_COLORS(): string[] {
+            return [Colors.PHASE_L1, Colors.PHASE_L2, Colors.PHASE_L3];
+        }
     }
 
     export class NumberFormat {
@@ -423,12 +434,85 @@ export namespace ChartConstants {
     }
 
     /**
-  * Calculates the stepSize
-  *
-  * @param min the minimum
-  * @param max the maximum
-  * @returns the stepSize if max and min are not null and min is smaller than max
-  */
+     * Resolves a CSS custom property of form "R, G, B" to an "rgb(R,G,B)" string.
+     * Falls back to black when the variable is undefined so downstream
+     * RGBColor.fromString does not crash.
+     */
+    const cssRgb = (name: string): string => {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v ? `rgb(${v})` : "rgb(0,0,0)";
+    };
+
+    /**
+     * Generates `count` rgb-string shades around a base rgb-string by varying
+     * the HSL lightness symmetrically. Used so multi-series datasets sharing a
+     * semantic color remain visually distinguishable while staying theme-driven.
+     */
+    const shadesOf = (baseRgb: string, count: number): string[] => {
+        const m = baseRgb.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+        if (!m) {
+            return Array(count).fill(baseRgb);
+        }
+        const [, rs, gs, bs] = m;
+        const [h, s, lBase] = rgbToHsl(Number(rs), Number(gs), Number(bs));
+        const step = 0.12;
+        const result: string[] = [];
+        for (let i = 0; i < count; i++) {
+            const offset = (i - Math.floor(count / 2)) * step;
+            const l = Math.min(0.9, Math.max(0.1, lBase + offset));
+            const [r, g, b] = hslToRgb(h, s, l);
+            result.push(`rgb(${r},${g},${b})`);
+        }
+        return result;
+    };
+
+    function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+        const rn = r / 255, gn = g / 255, bn = b / 255;
+        const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+        const l = (max + min) / 2;
+        let h = 0, s = 0;
+        if (max !== min) {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case rn: h = (gn - bn) / d + (gn < bn ? 6 : 0); break;
+                case gn: h = (bn - rn) / d + 2; break;
+                default: h = (rn - gn) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return [h, s, l];
+    }
+
+    function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+        if (s === 0) {
+            const v = Math.round(l * 255);
+            return [v, v, v];
+        }
+        const hue2rgb = (p: number, q: number, t: number) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        return [
+            Math.round(hue2rgb(p, q, h + 1 / 3) * 255),
+            Math.round(hue2rgb(p, q, h) * 255),
+            Math.round(hue2rgb(p, q, h - 1 / 3) * 255),
+        ];
+    }
+
+    /**
+     * Calculates the stepSize
+     *
+     * @param min the minimum
+     * @param max the maximum
+     * @returns the stepSize if max and min are not null and min is smaller than max
+     */
     export function calculateStepSize(min: number, max: number): number | null {
 
         if (min == null || max == null || min > max) {
@@ -443,11 +527,11 @@ export namespace ChartConstants {
     }
 
     /**
-   * Checks if data series is positive.
-   *
-   * @param datasets the chart datasets
-   * @returns true, if only positive data exists
-   */
+     * Checks if data series is positive.
+     *
+     * @param datasets the chart datasets
+     * @returns true, if only positive data exists
+     */
     export function isDataSeriesPositive(datasets: ChartDataset[]): boolean {
         return datasets.filter(el => el != null).map(el => el.data).every(el => el.every(e => (e as number) >= 0));
     }

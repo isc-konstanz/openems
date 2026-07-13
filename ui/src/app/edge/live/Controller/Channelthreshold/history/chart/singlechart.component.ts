@@ -54,7 +54,7 @@ export class SingleChartComponent extends AbstractHistoryChart {
                         return data[controllerId]
                             .map(val => Utils.multiplySafely(val, 1000));
                     },
-                    color: ChartConstants.Colors.SHADES_OF_YELLOW[0],
+                    color: ChartConstants.Colors.SHADES_OF_CONSUMPTION[0],
                 }];
 
                 return output;

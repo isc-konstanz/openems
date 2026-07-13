@@ -44,12 +44,12 @@ export class SellToGridLimitChartComponent extends AbstractHistoryChart {
                 {
                     name: translate.instant("GENERAL.GRID_SELL"),
                     converter: () => data["ActivePower"],
-                    color: ChartConstants.Colors.PURPLE,
+                    color: ChartConstants.Colors.GRID_SELL,
                 },
                 {
                     name: translate.instant("EDGE.INDEX.WIDGETS.GRID_OPTIMIZED_CHARGE.MAXIMUM_GRID_FEED_IN"),
                     converter: hasMaximumGridFeedInLimitInMeta(edge) ? () => data["_PropertyMaximumGridFeedInLimit"] : () => data["_PropertyMaximumSellToGridPower"],
-                    color: ChartConstants.Colors.YELLOW,
+                    color: ChartConstants.Colors.LIMIT,
                     hideShadow: true,
                     borderDash: [3, 3],
                 },

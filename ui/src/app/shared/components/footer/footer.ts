@@ -38,6 +38,7 @@ export class FooterComponent {
 
     @HostBinding("attr.data-isSmartPhone")
     public isSmartPhone: boolean = this.service.isSmartphoneResolution;
+    protected environment = environment;
 
     protected user: User | null = null;
     protected edge: Edge | null = null;

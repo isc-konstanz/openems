@@ -35,7 +35,7 @@ export class StorageSectionComponent extends AbstractSection implements OnInit, 
         unitpipe: UnitvaluePipe,
         private animationService: AnimationService,
     ) {
-        super("EDGE.INDEX.ENERGYMONITOR.STORAGE", "down", "var(--ion-color-success)", translate, service, "Storage");
+        super("EDGE.INDEX.ENERGYMONITOR.STORAGE", "down", "var(--ion-color-storage)", translate, service, "Storage");
         this.unitpipe = unitpipe;
     }
 

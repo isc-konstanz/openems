@@ -1,9 +1,9 @@
-package io.openems.edge.edge2edge.websocket.pvinverter;
+package io.openems.edge.edge2edge.websocket.dccharger;
 
 import io.openems.edge.common.channel.Doc;
 import io.openems.edge.common.component.OpenemsComponent;
 
-public interface Edge2EdgePvInverter extends OpenemsComponent {
+public interface Edge2EdgeWebsocketDcCharger extends OpenemsComponent {
 
 	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
 		; //

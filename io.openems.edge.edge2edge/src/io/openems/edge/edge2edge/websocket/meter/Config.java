@@ -1,15 +1,17 @@
-package io.openems.edge.edge2edge.websocket.genericreadcomponent;
+package io.openems.edge.edge2edge.websocket.meter;
 
 import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 
+import io.openems.common.types.MeterType;
+
 @ObjectClassDefinition(//
-		name = "Edge-2-Edge GenericReadComponent Websocket", //
-		description = "Connects a generic read component from a slave OpenEMS Edge via Websocket")
+		name = "Edge-2-Edge Meter Websocket", //
+		description = "Connects a Meter from a slave OpenEMS Edge via Websocket")
 @interface Config {
 
 	@AttributeDefinition(name = "Component-ID", description = "Unique ID of this Component")
-	String id() default "";
+	String id() default "meter0";
 
 	@AttributeDefinition(name = "Alias", description = "Human-readable name of this Component; defaults to Component-ID")
 	String alias() default "";
@@ -17,8 +19,11 @@ import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 	@AttributeDefinition(name = "Is enabled?", description = "Is this Component enabled?")
 	boolean enabled() default true;
 
-	@AttributeDefinition(name = "Remote Component-ID", description = "Component-ID of Component at the slave OpenEMS Edge.")
-	String remoteComponentId() default "";
+	@AttributeDefinition(name = "Remote Component-ID", description = "Component-ID of the Meter at the slave OpenEMS Edge.")
+	String remoteComponentId() default "meter0";
+
+	@AttributeDefinition(name = "Meter-Type", description = "What is measured by this Meter?")
+	MeterType type() default MeterType.PRODUCTION;
 
 	@AttributeDefinition(name = "Bridge-ID")
 	String bridge_id() default "bridge0";
@@ -26,6 +31,6 @@ import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 	@AttributeDefinition(name = "Bridge-Target")
 	String Bridge_target();
 
-	String webconsole_configurationFactory_nameHint() default "Edge-2-Edge GenericReadComponent [{id}]";
+	String webconsole_configurationFactory_nameHint() default "Edge-2-Edge Meter Websocket [{id}]";
 
 }

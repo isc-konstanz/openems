@@ -1,4 +1,4 @@
-package io.openems.edge.edge2edge.websocket.genericreadcomponent;
+package io.openems.edge.edge2edge.websocket.generic;
 
 import io.openems.edge.common.channel.Doc;
 import io.openems.edge.common.component.OpenemsComponent;

@@ -1,7 +1,5 @@
 package io.openems.edge.edge2edge.websocket.pvinverter;
 
-import static java.util.stream.Collectors.toSet;
-
 import org.osgi.service.cm.ConfigurationAdmin;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
@@ -13,29 +11,16 @@ import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
 import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.osgi.service.metatype.annotations.Designate;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import com.google.common.base.CaseFormat;
 import com.google.gson.JsonPrimitive;
 
 import io.openems.common.channel.AccessMode;
-import io.openems.common.channel.ChannelCategory;
-import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
-import io.openems.common.function.Disposable;
-import io.openems.common.jsonrpc.request.GetChannelsOfComponent;
-import io.openems.common.types.ChannelAddress;
 import io.openems.common.types.MeterType;
-import io.openems.common.types.OpenemsType;
-import io.openems.common.utils.JsonUtils;
-import io.openems.edge.common.channel.Doc;
-import io.openems.edge.common.component.AbstractOpenemsComponent;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.startstop.StartStoppable;
 import io.openems.edge.edge2edge.websocket.Edge2EdgeWebsocket;
-import io.openems.edge.edge2edge.websocket.bridge.BridgeComponentStateHandler;
-import io.openems.edge.edge2edge.websocket.bridge.ChannelSubscriber;
 import io.openems.edge.edge2edge.websocket.bridge.Edge2EdgeWebsocketBridge;
+import io.openems.edge.edge2edge.websocket.AbstractEdge2EdgeWebsocket;
 import io.openems.edge.meter.api.ElectricityMeter;
 import io.openems.edge.pvinverter.api.ManagedSymmetricPvInverter;
 
@@ -45,18 +30,13 @@ import io.openems.edge.pvinverter.api.ManagedSymmetricPvInverter;
 		immediate = true, //
 		configurationPolicy = ConfigurationPolicy.REQUIRE //
 )
-public class Edge2EdgeWebsocketPvInverterImpl extends AbstractOpenemsComponent implements ManagedSymmetricPvInverter, ElectricityMeter,
-		Edge2EdgePvInverter, Edge2EdgeWebsocket, OpenemsComponent {
-
-	private final Logger log = LoggerFactory.getLogger(Edge2EdgeWebsocketPvInverterImpl.class);
+public class Edge2EdgeWebsocketPvInverterImpl extends AbstractEdge2EdgeWebsocket implements
+		ManagedSymmetricPvInverter, ElectricityMeter, Edge2EdgeWebsocketPvInverter, Edge2EdgeWebsocket, OpenemsComponent {
 
 	@Reference
 	private ConfigurationAdmin cm;
 
 	private Config config;
-	private final ChannelSubscriber channelSubscriber = new ChannelSubscriber();
-	private final BridgeComponentStateHandler bridgeStateHandler = new BridgeComponentStateHandler();
-	private Disposable channelSubscriberDisposable;
 
 	/**
 	 * Binds the {@link Edge2EdgeWebsocketBridge}.
@@ -66,26 +46,9 @@ public class Edge2EdgeWebsocketPvInverterImpl extends AbstractOpenemsComponent i
 	@Reference(policy = ReferencePolicy.DYNAMIC, //
 			policyOption = ReferencePolicyOption.GREEDY, //
 			cardinality = ReferenceCardinality.OPTIONAL)
+	@Override
 	public void bindBridge(Edge2EdgeWebsocketBridge bridge) {
-		this.bridgeStateHandler.bindBridge(bridge);
-
-		this.channelSubscriberDisposable = bridge.addChannelSubscriber(this.channelSubscriber, t -> {
-			for (var entry : t.entrySet()) {
-				try {
-					final var channel = this.channel(entry.getKey().getChannelId());
-					if (channel.getType() == OpenemsType.BOOLEAN) {
-						final var value = JsonUtils.getAsType(OpenemsType.INTEGER, entry.getValue());
-						channel.setNextValue(value == null ? null : value.equals(1));
-						continue;
-					}
-					channel.setNextValue(JsonUtils.getAsType(channel.getType(), entry.getValue()));
-				} catch (IllegalArgumentException e) {
-					this.channelSubscriber.unsubscribeChannel(entry.getKey());
-				} catch (OpenemsNamedException e) {
-					this.log.info("Unable to parse remote channel value.", e);
-				}
-			}
-		});
+		super.bindBridge(bridge);
 	}
 
 	/**
@@ -93,9 +56,9 @@ public class Edge2EdgeWebsocketPvInverterImpl extends AbstractOpenemsComponent i
 	 *
 	 * @param bridge the bridge to unbind
 	 */
+	@Override
 	public void unbindBridge(Edge2EdgeWebsocketBridge bridge) {
-		this.bridgeStateHandler.unbindBridge(bridge);
-		this.channelSubscriberDisposable.dispose();
+		super.unbindBridge(bridge);
 	}
 
 	public Edge2EdgeWebsocketPvInverterImpl() {
@@ -105,58 +68,9 @@ public class Edge2EdgeWebsocketPvInverterImpl extends AbstractOpenemsComponent i
 				ManagedSymmetricPvInverter.ChannelId.values(),
 				StartStoppable.ChannelId.values(), //
 				Edge2EdgeWebsocket.ChannelId.values(), //
-				Edge2EdgePvInverter.ChannelId.values() //
+				Edge2EdgeWebsocketPvInverter.ChannelId.values() //
 		);
 		this._setMaxApparentPower(Integer.MAX_VALUE); // has no effect, as long as AllowedCharge/DischargePower are null
-
-		this.bridgeStateHandler.addOnStateChangeListener((prev, current) -> {
-			switch (current) {
-			case NOT_CONNECTED -> {
-				this._setRemoteNoComponentFault(false);
-				this._setRemoteNoConnection(true);
-			}
-			case CONNECTED -> {
-				this._setRemoteNoComponentFault(false);
-				this._setRemoteNoConnection(false);
-			}
-			case COMPONENT_NOT_AVAILABLE -> {
-				this._setRemoteNoComponentFault(true);
-				this._setRemoteNoConnection(false);
-			}
-			}
-		});
-
-		this.bridgeStateHandler.addOnSubscribeListener((bridge, channels) -> {
-			final var c = channels.stream() //
-					.filter(t -> t.accessMode() != AccessMode.WRITE_ONLY) //
-					.filter(t -> this.hasChannel(t.id()) || t.category() == ChannelCategory.STATE) //
-					.map(t -> new ChannelAddress(this.config.remoteComponentId(), t.id())) //
-					.collect(toSet());
-
-			for (var channel : channels) {
-				if (channel.category() != ChannelCategory.STATE) {
-					continue;
-				}
-
-				this.createChannelIfNotExisting(channel);
-			}
-
-			this.channelSubscriber.setSubscribeChannels(c);
-		});
-
-		this.bridgeStateHandler.addOnUnsubscribeListener(bridge -> {
-			final var unsubscribedChannels = this.channelSubscriber.unsubscribeAll();
-
-			// reset channel values
-			for (var channelAddress : unsubscribedChannels) {
-				try {
-					final var channel = this.channel(channelAddress.getChannelId());
-					channel.setNextValue(null);
-				} catch (IllegalArgumentException e) {
-					// channel does not exist
-				}
-			}
-		});
 
 		this.getActivePowerLimitChannel().onSetNextWrite(t -> {
 			if (this.config.remoteAccessMode() == AccessMode.READ_ONLY) {
@@ -170,19 +84,15 @@ public class Edge2EdgeWebsocketPvInverterImpl extends AbstractOpenemsComponent i
 
 	@Activate
 	protected void activate(ComponentContext context, Config config) {
-		super.activate(context, config.id(), config.alias(), config.enabled());
+		this.activate(context, config.id(), config.alias(), config.enabled(), this.cm, config.bridge_id(),
+				config.remoteComponentId());
 		this.config = config;
-
-		OpenemsComponent.updateReferenceFilter(this.cm, this.servicePid(), "Bridge", config.bridge_id());
-
-		this.bridgeStateHandler.updateComponentId(config.enabled() ? config.remoteComponentId() : null);
 	}
 
 	@Deactivate
 	@Override
 	protected void deactivate() {
 		super.deactivate();
-		this.bridgeStateHandler.deactivate();
 	}
 
 	@Override
@@ -193,30 +103,6 @@ public class Edge2EdgeWebsocketPvInverterImpl extends AbstractOpenemsComponent i
 	@Override
 	public String debugLog() {
 		return "L:" + this.getActivePower().asString();
-	}
-
-	@SuppressWarnings("deprecation")
-	private boolean hasChannel(String channelId) {
-		return this._channel(channelId) != null;
-	}
-
-	@SuppressWarnings("deprecation")
-	private void createChannelIfNotExisting(GetChannelsOfComponent.ChannelRecord channel) {
-		if (this._channel(channel.id()) != null) {
-			return;
-		}
-
-		final var doc = switch (channel.category()) {
-		case ENUM -> Doc.of(channel.type());
-		case OPENEMS_TYPE -> Doc.of(channel.type()) //
-				.unit(channel.unit());
-		case STATE -> Doc.of(channel.level());
-		};
-		final var channelName = CaseFormat.UPPER_CAMEL.to(CaseFormat.UPPER_UNDERSCORE, channel.id());
-		this.addChannel(new io.openems.edge.common.channel.ChannelId.ChannelIdImpl(channelName,
-				doc.persistencePriority(channel.persistencePriority()) //
-						.accessMode(AccessMode.READ_ONLY) //
-						.text(channel.text())));
 	}
 
 }

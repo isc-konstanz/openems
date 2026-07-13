@@ -162,6 +162,9 @@
       },
       "WIDGETS": {
         "AUTARCHY_INFO": "自給自足は、発電と蓄電池放電によってカバーできる現在の電力の割合を示します。",
+        "BALANCING": {
+          "GRID_SETPOINT_TARGET": "Grid draw setpoint"
+        },
         "CHANNELTRESHOLD": {
           "ACTIVE_TIME_OVER_PERIOD": "アクティブ時間",
           "OUTPUT": "出力",
@@ -332,6 +335,12 @@
         },
         "INFO_STORAGE_FOR_CHARGE": "負の値は蓄電池充電に対応します",
         "INFO_STORAGE_FOR_DISCHARGE": "正の値は蓄電池放電に対応します",
+        "LIMIT_TOTAL_DISCHARGE": {
+          "FORCE_CHARGE_POWER": "強制充電出力",
+          "FORCE_CHARGE_SOC": "強制充電開始SoC",
+          "MIN_SOC": "最小SoC",
+          "RELATION_ERROR": "強制充電のしきい値は最小SoC以下である必要があります"
+        },
         "PEAKSHAVING": {
           "ASYMMETRIC_INFO": "入力されたパフォーマンス値は、個々のフェーズを指します。最も強調されたフェーズに調整されます。",
           "END_DATE": "終了日",

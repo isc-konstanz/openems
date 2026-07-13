@@ -145,6 +145,9 @@
       },
       "WIDGETS": {
         "AUTARCHY_INFO": "Autarky označuje procento aktuální energie, kterou lze pokrýt vybitím z výroby a skladování.",
+        "BALANCING": {
+          "GRID_SETPOINT_TARGET": "Grid draw setpoint"
+        },
         "CHANNELTRESHOLD": {
           "ACTIVE_TIME_OVER_PERIOD": "Čas",
           "OUTPUT": "Výstup",
@@ -312,6 +315,12 @@
         },
         "INFO_STORAGE_FOR_CHARGE": "Záporné hodnoty odpovídají zatížení paměti",
         "INFO_STORAGE_FOR_DISCHARGE": "Kladné hodnoty odpovídají vybití paměti",
+        "LIMIT_TOTAL_DISCHARGE": {
+          "FORCE_CHARGE_POWER": "Vynucené nabíjení výkonem",
+          "FORCE_CHARGE_SOC": "Vynucené nabíjení pod",
+          "MIN_SOC": "Minimální stav nabití",
+          "RELATION_ERROR": "Limit vynuceného nabíjení musí být menší nebo roven minimálnímu stavu nabití"
+        },
         "PEAKSHAVING": {
           "ASYMMETRIC_INFO": "Zadané hodnoty výkonu se vztahují k jednotlivým fázím. Je nastavena na nejvíce namáhanou fázi.",
           "END_DATE": "Datum Ukončení",

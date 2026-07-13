@@ -144,6 +144,9 @@
       },
       "WIDGETS": {
         "AUTARCHY_INFO": "La autarquía indica el porcentaje de energía actual que puede cubrirse mediante la descarga de generación y almacenamiento.",
+        "BALANCING": {
+          "GRID_SETPOINT_TARGET": "Grid draw setpoint"
+        },
         "CHANNELTRESHOLD": {
           "OUTPUT": "Salida"
         },
@@ -309,6 +312,12 @@
         },
         "INFO_STORAGE_FOR_CHARGE": "Los valores negativos corresponden a la carga de memoria",
         "INFO_STORAGE_FOR_DISCHARGE": "Los valores positivos corresponden a la descarga de la memoria",
+        "LIMIT_TOTAL_DISCHARGE": {
+          "FORCE_CHARGE_POWER": "Carga forzada con",
+          "FORCE_CHARGE_SOC": "Carga forzada por debajo de",
+          "MIN_SOC": "SoC mínimo",
+          "RELATION_ERROR": "El límite de carga forzada debe ser menor o igual al SoC mínimo"
+        },
         "PEAKSHAVING": {
           "ASYMMETRIC_INFO": "Los valores de rendimiento introducidos se refieren a fases individuales. Se ajusta a la fase más estresada.",
           "END_DATE": "Fecha final",

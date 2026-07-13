@@ -21,6 +21,8 @@ import { Controller_EnerixControl } from "./Controller/EnerixControl/EnerixContr
 import { ControllerEssFixActivePower } from "./Controller/Ess/FixActivePower/Ess_FixActivePower";
 import { ControllerEssGridOptimizedChargeModule } from "./Controller/Ess/GridOptimizedCharge/Ess_GridOptimizedCharge";
 import { ControllerEssTimeOfUseTariff } from "./Controller/Ess/TimeOfUseTariff/Ess_TimeOfUseTariff";
+import { ControllerEssLimitTotalDischargeComponent } from "./Controller/Ess/LimitTotalDischarge/LimitTotalDischarge";
+import { ControllerEssLimitTotalDischargeModalComponent } from "./Controller/Ess/LimitTotalDischarge/modal/modal.component";
 import { AdministrationComponent } from "./Controller/Evcs/administration/administration.component";
 import { Controller_Evcs } from "./Controller/Evcs/Evcs";
 import { ControllerEvseSingle } from "./Controller/Evse/EvseSingle.module";
@@ -38,6 +40,8 @@ import { Controller_Symmetric_PeakShavingModalComponent } from "./Controller/Pea
 import { Controller_Symmetric_PeakShavingComponent } from "./Controller/PeakShaving/Symmetric/Symmetric";
 import { Controller_Symmetric_TimeSlot_PeakShavingModalComponent } from "./Controller/PeakShaving/Symmetric_TimeSlot/modal/modal.component";
 import { Controller_Symmetric_TimeSlot_PeakShavingComponent } from "./Controller/PeakShaving/Symmetric_TimeSlot/Symmetric_TimeSlot";
+import { Controller_Symmetric_BalancingComponent } from "./Controller/Ess/Balancing/Balancing";
+import { Controller_Symmetric_BalancingModalComponent } from "./Controller/Ess/Balancing/modal/modal.component";
 import { DelayedSellToGridComponent } from "./delayedselltogrid/delayedselltogrid.component";
 import { DelayedSellToGridModalComponent } from "./delayedselltogrid/modal/modal.component";
 import { EnergymonitorModule } from "./energymonitor/energymonitor.module";
@@ -91,8 +95,12 @@ import { SystemOutageInfoComponent } from "./system-outage-info/oe-system-outage
         Controller_ChannelthresholdComponent,
         Controller_ChpSocComponent,
         Controller_ChpSocModalComponent,
+        ControllerEssLimitTotalDischargeComponent,
+        ControllerEssLimitTotalDischargeModalComponent,
         Controller_Io_ChannelSingleThresholdComponent,
         Controller_Io_ChannelSingleThresholdModalComponent,
+        Controller_Symmetric_BalancingComponent,
+        Controller_Symmetric_BalancingModalComponent,
         Controller_Symmetric_PeakShavingComponent,
         Controller_Symmetric_PeakShavingModalComponent,
         Controller_Symmetric_TimeSlot_PeakShavingComponent,

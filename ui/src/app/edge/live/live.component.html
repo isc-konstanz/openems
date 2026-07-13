@@ -141,6 +141,12 @@
                   <oe-controller-io-heatpump [componentId]="widget.componentId"></oe-controller-io-heatpump>
                 </ion-col>
 
+                <ion-col *ngSwitchCase="'Controller.Symmetric.Balancing'" size="12" size-lg="6"
+                         class="ion-no-padding">
+                  <Controller_Symmetric_Balancing [componentId]="widget.componentId">
+                  </Controller_Symmetric_Balancing>
+                </ion-col>
+
                 <ion-col *ngSwitchCase="'Controller.Symmetric.PeakShaving'" size="12" size-lg="6"
                   class="ion-no-padding">
                   <Controller_Symmetric_PeakShaving [componentId]="widget.componentId">
@@ -156,6 +162,12 @@
                 <ion-col *ngSwitchCase="'Controller.TimeslotPeakshaving'" size="12" size-lg="6" class="ion-no-padding">
                   <Controller_Symmetric_TimeSlot_PeakShaving [componentId]="widget.componentId">
                   </Controller_Symmetric_TimeSlot_PeakShaving>
+                </ion-col>
+
+                <ion-col *ngSwitchCase="'Controller.Ess.LimitTotalDischarge'" size="12" size-lg="6"
+                  class="ion-no-padding">
+                  <Controller_Ess_LimitTotalDischarge [componentId]="widget.componentId">
+                  </Controller_Ess_LimitTotalDischarge>
                 </ion-col>
 
                 <ion-col *ngSwitchCase="'Controller.Ess.DelayedSellToGrid'" size="12" size-lg="6"

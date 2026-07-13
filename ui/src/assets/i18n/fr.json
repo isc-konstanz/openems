@@ -147,6 +147,9 @@
       },
       "WIDGETS": {
         "AUTARCHY_INFO": "L'AUtarcie indique le pourcentage de la puissance actuelle qui peut être couverte par la production et la décharge du stockage.",
+        "BALANCING": {
+          "GRID_SETPOINT_TARGET": "Grid draw setpoint"
+        },
         "CHANNELTRESHOLD": {
           "OUTPUT": "Output"
         },
@@ -306,6 +309,12 @@
         },
         "INFO_STORAGE_FOR_CHARGE": "Les valeurs négatives correspondent au chargement de la mémoire",
         "INFO_STORAGE_FOR_DISCHARGE": "Les valeurs positives correspondent à une décharge de la mémoire",
+        "LIMIT_TOTAL_DISCHARGE": {
+          "FORCE_CHARGE_POWER": "Charge forcée à",
+          "FORCE_CHARGE_SOC": "Charge forcée en dessous de",
+          "MIN_SOC": "SoC minimal",
+          "RELATION_ERROR": "La limite de charge forcée doit être inférieure ou égale au SoC minimal"
+        },
         "PEAKSHAVING": {
           "ASYMMETRIC_INFO": "The entered performance values ​​refer to individual phases. It is adjusted to the most stressed phase.",
           "END_DATE": "Date de fin",

@@ -258,6 +258,9 @@
             "SYSTEMUPDATE": "Systemupdate",
             "WIDGETS": {
                 "AUTARCHY_INFO": "Die Autarkie gibt an zu wie viel Prozent die aktuell genutzte Leistung durch Erzeugung und Speicherentladung gedeckt wird.",
+                "BALANCING": {
+                    "GRID_SETPOINT_TARGET": "Netzbezug Sollwert"
+                },
                 "CHANNELTRESHOLD": {
                     "ACTIVE_TIME_OVER_PERIOD": "Aktive Zeit",
                     "OUTPUT": "Ausgang",
@@ -481,6 +484,12 @@
                 },
                 "INFO_STORAGE_FOR_CHARGE": "Negative Werte entsprechen Speicher Beladung",
                 "INFO_STORAGE_FOR_DISCHARGE": "Positive Werte entsprechen Speicher Entladung",
+                "LIMIT_TOTAL_DISCHARGE": {
+                    "FORCE_CHARGE_POWER": "Beladung erzwungen mit",
+                    "FORCE_CHARGE_SOC": "Beladung erzwungen unter",
+                    "MIN_SOC": "Minimaler Ladezustand",
+                    "RELATION_ERROR": "Zwangsbeladungs-Grenze muss kleiner oder gleich dem minimalen Ladezustand sein"
+                },
                 "PEAKSHAVING": {
                     "ASYMMETRIC_INFO": "Eingetragene Leistungswerte beziehen sich auf einzelne Phasen. Es wird auf die jeweils am stärksten belastete Phase ausgeregelt.",
                     "END_DATE": "End Datum",

@@ -1,0 +1,7 @@
+@if (isInitialized) {
+  <oe-flat-widget [modalComponent]="modalComponent" [title]="component.alias"
+    [icon]="{name: 'sync-outline', color: 'normal'}">
+    <oe-flat-widget-line [name]="'EDGE.INDEX.WIDGETS.BALANCING.GRID_SETPOINT_TARGET' | translate"
+      [converter]="CONVERT_WATT_TO_KILOWATT" [value]="targetGridSetpoint"></oe-flat-widget-line>
+  </oe-flat-widget>
+}

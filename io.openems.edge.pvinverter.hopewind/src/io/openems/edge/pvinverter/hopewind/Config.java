@@ -19,11 +19,14 @@ public @interface Config {
 	@AttributeDefinition(name = "Is enabled?", description = "Is this Component enabled?")
 	boolean enabled() default true;
 
-	@AttributeDefinition(name = "Has Watchdog?", description = "Does this Component watch for active power limit updates?")
-	boolean watchdog() default false;
+	@AttributeDefinition(name = "Has Watchdog?", description = "Force the power limit to 0 when no active power limit setpoint was received for 'Watchdog Timer' seconds. The inverter has no communication supervision of its own, so this failsafe should stay enabled.")
+	boolean watchdog() default true;
 
-	@AttributeDefinition(name = "Watchdog Timer", description = "The amount of seconds after which the system resets.")
+	@AttributeDefinition(name = "Watchdog Timer", description = "Seconds without an active power limit setpoint before the failsafe forces the power limit to 0. Note: API re-writes count as setpoints, so the effective reaction time is apiTimeout + watchdogTimer.")
 	int watchdogTimer() default PvInverterHopewind.WATCH_DOG_TIMER_DEFAULT;
+
+	@AttributeDefinition(name = "Watchdog Shutdown Timer", description = "Additional seconds after the watchdog tripped before the inverter is commanded to shut down entirely. Set to 0 to disable the shutdown escalation.")
+	int watchdogShutdownTimer() default PvInverterHopewind.WATCH_DOG_SHUTDOWN_TIMER_DEFAULT;
 
 	@AttributeDefinition(name = "Start/stop behaviour", description = "Should this Component be forced to start or stop?")
 	StartStopConfig startStop() default StartStopConfig.START;

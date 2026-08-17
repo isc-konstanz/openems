@@ -1,8 +1,73 @@
 = Hopewind PV Inverter
 
-Implementation of Hopewind PV inverters.
+Implementation of Hopewind PV inverters (Modbus).
 
 Tested on
-- t.b.d.
+- HSNV60K-G01 (66 kW)
+
+== Register knowledge
+
+There is no official Modbus documentation for these inverters. The register map
+was reverse-engineered by sniffing the RS-485 bus while the vendor's own master
+was connected (see `Projects/Hopewind/simple_technical_documentation/main.tex`).
+Key registers:
+
+|===
+| Register | Access | Meaning
+
+| 32014 | W | "Communication enable" / heartbeat. *Drives only the communication
+LED on the inverter.* The device takes NO protective action when writes stop -
+there is no built-in communication supervision.
+| 40011 | R/W | Active power regulation mode: `0` = actual power [kW] (register
+40012), `1` = proportional power [%] (register 40013). Mind: this mapping is the
+source of truth for `ActivePowerLimitMode`.
+| 40012 | R/W | Active power limit, 0.01 kW units (6600 = 66 kW).
+| 40013 | R/W | Active power limit, 0.01 % units (10000 = 100 %).
+| 40200 / 40201 / 40202 | W | Startup / Shutdown / Reset (write `1`).
+| 40546 / 40547 | R | Running state / inverter state (see `InverterState`).
+|===
+
+== Failsafe concept
+
+Because the inverter does not supervise its communication, export protection
+must always be an *active command* from this driver - never the absence of a
+write:
+
+* *Heartbeat* (register 32014) is written every cycle as a pure
+  keepalive/diagnostic. `HEART_BEAT_FAILED` (WARNING) is raised after repeated
+  Modbus write failures.
+* *Watchdog stage 1*: if no external `ACTIVE_POWER_LIMIT` setpoint arrives for
+  `watchdogTimer` seconds (default 60), the driver latches a failsafe that
+  forces the power limit to 0 *on every cycle* - both the kW and the percent
+  register are written, so the limit is effective regardless of the device's
+  regulation mode. `WATCHDOG_TRIPPED` (WARNING) is raised. A fresh external
+  setpoint releases the failsafe.
+* *Watchdog stage 2*: after `watchdogShutdownTimer` additional seconds (default
+  300, 0 = disabled) the inverter is commanded to shut down entirely via the
+  state machine (register 40201). `WATCHDOG_SHUTDOWN` (WARNING) is raised. Fresh
+  setpoints recover the inverter via startup (register 40200).
+* The watchdog is armed at component activation - a control path that dies
+  before the first setpoint is still covered. An intentional STOP (config or
+  StartStop channel) keeps the watchdog idle.
+
+=== Reaction time
+
+Values re-applied by an Api-Controller (`ApiWorker`) are indistinguishable from
+fresh setpoints. The effective reaction time after a dead control path (e.g. a
+stopped main edge in an Edge2Edge setup) is therefore:
+
+  apiTimeout (Api-Controller on this edge) + watchdogTimer
+
+Configure `apiTimeout` *non-zero* and small compared to `watchdogTimer`. With
+`apiTimeout = 0` the stale setpoint is re-written forever and the watchdog can
+never trip.
+
+=== Residual risk
+
+The failsafe covers every failure *upstream* of this edge. A failure of this
+edge itself (crash, stalled cycle, severed Modbus link) has no software
+mitigation, because the device does not supervise communication. If the site's
+safety concept must cover that class, it needs an external answer (e.g.
+NS-protection relay or export monitoring at the grid connection point).
 
 https://github.com/OpenEMS/openems/tree/develop/io.openems.edge.pvinverter.hopewind[Source Code icon:github[]]

@@ -11,17 +11,21 @@ public class StoppedHandler extends StateHandler<State, Context> {
 	public State runAndGetNextState(Context context) {
 		var inverter = context.getParent();
 
+		if (inverter.getStartStopTarget() == StartStop.START) {
+			return State.GO_RUNNING;
+		}
+
 		switch (inverter.getInverterState().asEnum()) {
-			case InverterState.FAULT:
-				return State.ERROR;
+		case InverterState.FAULT:
+			return State.ERROR;
 
-			case InverterState.SHUTDOWN:
-				// Mark as stopped
-				inverter._setStartStop(StartStop.STOP);
+		case InverterState.SHUTDOWN:
+			// Mark as stopped
+			inverter._setStartStop(StartStop.STOP);
 
-				return State.STOPPED;
-			default:
-				break;
+			return State.STOPPED;
+		default:
+			break;
 		}
 		return State.UNDEFINED;
 	}

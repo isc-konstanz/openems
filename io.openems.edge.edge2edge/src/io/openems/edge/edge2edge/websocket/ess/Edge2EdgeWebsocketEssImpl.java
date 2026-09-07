@@ -2,6 +2,9 @@ package io.openems.edge.edge2edge.websocket.ess;
 
 import static io.openems.common.utils.IntUtils.maxInteger;
 import static io.openems.common.utils.IntUtils.minInteger;
+import static org.osgi.service.component.annotations.ReferenceCardinality.OPTIONAL;
+import static org.osgi.service.component.annotations.ReferencePolicy.DYNAMIC;
+import static org.osgi.service.component.annotations.ReferencePolicyOption.GREEDY;
 
 import org.osgi.service.cm.ConfigurationAdmin;
 import org.osgi.service.component.ComponentContext;
@@ -10,9 +13,6 @@ import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
 import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
-import org.osgi.service.component.annotations.ReferencePolicy;
-import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.osgi.service.metatype.annotations.Designate;
 
 import com.google.gson.JsonPrimitive;
@@ -43,7 +43,7 @@ public class Edge2EdgeWebsocketEssImpl extends AbstractEdge2EdgeWebsocket implem
 	@Reference
 	private ConfigurationAdmin cm;
 
-	@Reference(cardinality = ReferenceCardinality.OPTIONAL, policyOption = ReferencePolicyOption.GREEDY, policy = ReferencePolicy.DYNAMIC)
+	@Reference(cardinality = OPTIONAL, policyOption = GREEDY, policy = DYNAMIC)
 	private volatile Power power;
 
 	private Config config;
@@ -53,9 +53,7 @@ public class Edge2EdgeWebsocketEssImpl extends AbstractEdge2EdgeWebsocket implem
 	 *
 	 * @param bridge the bridge to bind
 	 */
-	@Reference(policy = ReferencePolicy.DYNAMIC, //
-			policyOption = ReferencePolicyOption.GREEDY, //
-			cardinality = ReferenceCardinality.OPTIONAL)
+	@Reference(policy = DYNAMIC, policyOption = GREEDY, cardinality = OPTIONAL)
 	@Override
 	public void bindBridge(Edge2EdgeWebsocketBridge bridge) {
 		super.bindBridge(bridge);

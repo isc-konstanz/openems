@@ -15,6 +15,7 @@ launcher.tmp = ${workspace}/cache/backend
 	-Dfile.encoding=UTF-8
 
 -runproperties: \
+    java.awt.headless=true,\
     felix.cm.dir=${launcher.var},\
     openems.data.dir=${launcher.data}, \
     org.osgi.framework.storage=${launcher.tmp}, \

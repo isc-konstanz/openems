@@ -4,7 +4,9 @@ import static io.openems.common.jsonrpc.serialization.JsonSerializerUtil.jsonObj
 import static io.openems.common.utils.FunctionUtils.doNothing;
 import static io.openems.common.utils.InetAddressUtils.parseOrNull;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +21,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
@@ -61,8 +64,9 @@ import io.openems.edge.core.host.jsonrpc.SetNetworkConfig;
 /**
  * OperatingSystem implementation for Debian with systemd.
  */
-public class OperatingSystemDebianSystemd implements OperatingSystem {
+public class OperatingSystemDebianSystemd extends OperatingSystemLinux implements OperatingSystem {
 
+	private static final String RASPBERRY_TEMPERATURE_FILE = "/sys/class/thermal/thermal_zone0/temp";
 	private static final String NETWORK_BASE_PATH = "/etc/systemd/network";
 	private static final String NETWORK_MANAGER_BASE_PATH = "/etc/NetworkManager/system-connections";
 	private static final String NETWORK_MANAGER_RUN_PATH = "/run/NetworkManager/system-connections";
@@ -1354,6 +1358,29 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 		// reload connection files to apply the removal
 		this.handleExecuteSystemCommandRequest(
 				ExecuteSystemCommandRequest.withRootPrivileges("nmcli connection reload", true, 0));
+	}
+
+	@Override
+	public Optional<Double> getCpuTemperature() {
+		if (new File(RASPBERRY_TEMPERATURE_FILE).exists()) {
+			return Optional.of(readMilliCelsiusFromFile(RASPBERRY_TEMPERATURE_FILE));
+		}
+
+		return Optional.empty();
+	}
+
+	private static double readMilliCelsiusFromFile(String file) {
+		String temperatureAsMilliCelsiusString = null;
+		try (var reader = new BufferedReader(new FileReader(file))) {
+			temperatureAsMilliCelsiusString = reader.readLine();
+			var temperatureAsMilliCelsius = Integer.parseInt(temperatureAsMilliCelsiusString);
+			return temperatureAsMilliCelsius / 1000.0;
+		} catch (IOException e) {
+			throw new RuntimeException("Failed to read cpu temperature from file '" + file + "'", e);
+		} catch (NumberFormatException ex) {
+			throw new RuntimeException(
+					"Failed to parse cpu temperature '" + temperatureAsMilliCelsiusString + "' to integer.", ex);
+		}
 	}
 
 }

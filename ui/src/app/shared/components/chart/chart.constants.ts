@@ -8,10 +8,48 @@ import { RGBColor } from "../../type/defaulttypes";
 import { Language } from "../../type/language";
 import { EmptyObj, TPartialBy } from "../../type/utility";
 import { ArrayUtils } from "../../utils/array/array.utils";
-import { ChartAxis, HistoryUtils, Utils } from "../../utils/utils";
+import { ChartAxis, HistoryUtils, Utils, YAxisType } from "../../utils/utils";
 import { Formatter } from "../shared/formatter";
-import { AbstractHistoryChart } from "./abstracthistorychart";
 import { ChartTypes } from "./chart.types";
+
+function getYAxisTitle(
+    title: YAxisType,
+    translate: TranslateService,
+    chartType: "bar" | "line",
+    customTitle?: string,
+): string {
+    switch (title) {
+        case YAxisType.RELAY:
+            if (chartType === "line") {
+                return "";
+            }
+            return translate.instant("EDGE.INDEX.WIDGETS.CHANNELTRESHOLD.ACTIVE_TIME_OVER_PERIOD");
+        case YAxisType.TIME:
+            return translate.instant("EDGE.INDEX.WIDGETS.CHANNELTRESHOLD.ACTIVE_TIME_OVER_PERIOD");
+        case YAxisType.RESTRICTION:
+        case YAxisType.PERCENTAGE:
+            return "%";
+        case YAxisType.REACTIVE:
+            return "var";
+        case YAxisType.ENERGY:
+            return chartType === "bar" ? "kWh" : "kW";
+        case YAxisType.POWER:
+            return "kW";
+        case YAxisType.HEAT_PUMP:
+        case YAxisType.ENERIX_CONTROL:
+            return translate.instant("GENERAL.STATE");
+        case YAxisType.VOLTAGE:
+            return "V";
+        case YAxisType.CURRENT:
+            return "A";
+        case YAxisType.TEMPERATURE:
+            return "°C";
+        case YAxisType.NONE:
+            return "";
+        default:
+            return "";
+    }
+}
 
 export namespace ChartConstants {
     export const NUMBER_OF_Y_AXIS_TICKS: number = 7;
@@ -20,30 +58,39 @@ export namespace ChartConstants {
     export const REQUEST_TIMEOUT = 500;
 
     export class Plugins {
-
         public static Legend = class {
-            public static POINT_STYLE = (dataset: ChartDataset): Pick<LegendItem, "pointStyle" | "fillStyle" | "lineDash"> | EmptyObj => ChartConstants.Plugins.POINT_STYLE(dataset);
+            public static POINT_STYLE = (
+                dataset: ChartDataset,
+            ): Pick<LegendItem, "pointStyle" | "fillStyle" | "lineDash"> | EmptyObj =>
+                ChartConstants.Plugins.POINT_STYLE(dataset);
         };
 
         public static Datasets = class {
-
             public static readonly DEFAULT_BORDER_DASH: number[] = [10, 10];
 
-            public static POINT_STYLE = (dataset: HistoryUtils.DisplayValue<any>): TPartialBy<Pick<ChartDataset<any>, "pointStyle" | "borderDash">, "borderDash"> | EmptyObj => {
-                const res = ChartConstants.Plugins.POINT_STYLE({ data: [], ...(dataset["borderDash"] != null && { borderDash: dataset["borderDash"] }) });
+            public static POINT_STYLE = (
+                dataset: HistoryUtils.DisplayValue<any>,
+            ): TPartialBy<Pick<ChartDataset<any>, "pointStyle" | "borderDash">, "borderDash"> | EmptyObj => {
+                const res = ChartConstants.Plugins.POINT_STYLE({
+                    data: [],
+                    ...(dataset["borderDash"] != null && {
+                        borderDash: dataset["borderDash"],
+                    }),
+                });
                 return {
                     pointStyle: res.pointStyle,
-                    ...(dataset["borderDash"] != null && { borderDash: dataset["borderDash"] }),
+                    ...(dataset["borderDash"] != null && {
+                        borderDash: dataset["borderDash"],
+                    }),
                 };
             };
 
             /**
              * Enhances the hover effect
              *
+             * @param color The color of the dataset
+             * @returns Chartjs dataset options
              * @info increases currently selected datapoints by increasing their radius
-             *
-             * @param color the color of the dataset
-             * @returns chartjs dataset options
              */
             public static HOVER_ENHANCE = (color: ChartTypes.Color) => ({
                 pointHoverRadius: 2,
@@ -55,8 +102,7 @@ export namespace ChartConstants {
         };
 
         public static ToolTips = class {
-
-            public static POINT_STYLE = (dataset: ChartDataset): { rotation: number, pointStyle: PointStyle } => {
+            public static POINT_STYLE = (dataset: ChartDataset): { rotation: number; pointStyle: PointStyle } => {
                 return {
                     pointStyle: ChartConstants.Plugins.POINT_STYLE(dataset).pointStyle,
                     rotation: 0,
@@ -101,22 +147,205 @@ export namespace ChartConstants {
          *
          * @param id the chart axis id
          * @returns plugin applied features
+        /**
+         * Syncs charts by x axis position.
+         *
+         * @returns
+         */
+        public static readonly SYNC_CHARTS = () => ({
+            id: "syncChart",
+            groups: {},
+            enabled: true,
+            syncing: false,
+
+            registerChart(chart) {
+                const group = chart.options.plugins?.syncChart?.group;
+                if (group == null) {
+                    return;
+                }
+                if (!this.groups[group]) {
+                    this.groups[group] = [];
+                }
+                if (!this.groups[group].includes(chart)) {
+                    this.groups[group].push(chart);
+                }
+            },
+
+            unregisterChart(chart) {
+                const group = chart.options.plugins?.syncChart?.group ?? null;
+                if (group == null || !this.groups[group]) {
+                    return;
+                }
+                this.groups[group] = this.groups[group].filter((groupedChart) => groupedChart !== chart);
+            },
+
+            getOtherCharts(chart): Chart[] {
+                const group = chart.options.plugins?.syncChart?.group ?? null;
+                if (group == null || !this.groups[group]) {
+                    return [];
+                }
+                return this.groups[group].filter((groupedChart) => groupedChart !== chart);
+            },
+
+            afterInit(chart) {
+                const opts = chart.options.plugins?.syncChart ?? null;
+                if (opts?.enabled == false) {
+                    return;
+                }
+
+                this.registerChart(chart);
+
+                // Defer getOtherCharts until mouse event — siblings may not be registered yet at afterInit time
+                const getOthers = () => this.getOtherCharts(chart);
+
+                const syncPosition = (clientX: number, otherCharts: Chart[]) => {
+                    otherCharts.forEach((sibling) => {
+                        if (sibling.canvas === null) {
+                            return;
+                        }
+                        const rect = sibling.canvas.getBoundingClientRect();
+                        const sourceRect = chart.canvas.getBoundingClientRect();
+                        const xPercent = (clientX - sourceRect.left) / sourceRect.width;
+                        const mappedX = rect.left + xPercent * rect.width;
+                        const syntheticEvent = new MouseEvent("mousemove", {
+                            clientX: mappedX,
+                            clientY: rect.top + rect.height / 2,
+                        });
+                        sibling.canvas.dispatchEvent(syntheticEvent);
+                    });
+                };
+
+                const clearTooltips = () => {
+                    const siblings = getOthers();
+                    siblings.forEach((sibling) => {
+                        sibling.tooltip.setActiveElements([], { x: 0, y: 0 });
+                        sibling.update("none");
+                    });
+                    chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+                    chart.update("none");
+                };
+
+                const onMouseOver = (event: MouseEvent) => {
+                    const otherCharts = getOthers();
+                    if (otherCharts.length === 0) {
+                        return;
+                    }
+                    if (!event.isTrusted) {
+                        return;
+                    }
+                    syncPosition(event.clientX, otherCharts);
+                };
+
+                const onMouseOut = () => clearTooltips();
+
+                const onTouchMove = (event: TouchEvent) => {
+                    const otherCharts = getOthers();
+                    if (otherCharts.length === 0 || event.touches.length === 0) {
+                        return;
+                    }
+                    syncPosition(event.touches[0].clientX, otherCharts);
+                };
+
+                const onTouchEnd = () => clearTooltips();
+
+                chart.canvas.addEventListener("mousemove", onMouseOver);
+                chart.canvas.addEventListener("mouseenter", onMouseOver);
+                chart.canvas.addEventListener("mouseleave", onMouseOut);
+                chart.canvas.addEventListener("mouseout", onMouseOut);
+                chart.canvas.addEventListener("touchmove", onTouchMove);
+                chart.canvas.addEventListener("touchstart", onTouchMove);
+                chart.canvas.addEventListener("touchend", onTouchEnd);
+                chart.canvas.addEventListener("touchcancel", onTouchEnd);
+
+                // Keep listener references for proper cleanup on destroy.
+                (chart as any)._syncChartListeners = {
+                    onMouseOver,
+                    onMouseOut,
+                    onTouchMove,
+                    onTouchEnd,
+                };
+
+                // Defer syncDrawingAreas until all charts in group are registered
+                setTimeout(() => {
+                    const all = [...getOthers(), chart];
+                    if (all.length > 1) {
+                        this.syncDrawingAreas(all);
+                    }
+                }, 100);
+            },
+            syncDrawingAreas(charts) {
+                if (this._syncing) {
+                    return;
+                }
+                this._syncing = true;
+
+                // Reset padding first to get accurate chartArea measurements
+                charts.forEach((chart) => {
+                    chart.options.layout ??= {};
+                    chart.options.layout.padding = {
+                        ...chart.options.layout.padding,
+                        left: 0,
+                        right: 0,
+                    };
+                    chart.update("none");
+                });
+
+                const maxLeft = Math.max(...charts.map((c) => c.chartArea?.left ?? 0));
+                const maxRight = Math.max(...charts.map((c) => (c.width ?? 0) - (c.chartArea?.right ?? c.width ?? 0)));
+
+                charts.forEach((chart) => {
+                    const paddingLeft = maxLeft - (chart?.chartArea?.left ?? 0);
+                    const chartRightMargin = (chart.width ?? 0) - (chart.chartArea?.right ?? chart.width ?? 0);
+                    const paddingRight = maxRight - chartRightMargin;
+
+                    chart.options.layout ??= {};
+                    chart.options.layout.padding = {
+                        ...chart.options.layout.padding,
+                        left: paddingLeft,
+                        right: paddingRight,
+                    };
+                    chart.update("none");
+                });
+                this._syncing = false;
+            },
+            beforeDestroy(chart) {
+                const listeners = (chart as any)._syncChartListeners;
+                if (listeners != null && chart.canvas != null) {
+                    chart.canvas.removeEventListener("mousemove", listeners.onMouseOver);
+                    chart.canvas.removeEventListener("mouseenter", listeners.onMouseOver);
+                    chart.canvas.removeEventListener("mouseleave", listeners.onMouseOut);
+                    chart.canvas.removeEventListener("mouseout", listeners.onMouseOut);
+                    chart.canvas.removeEventListener("touchmove", listeners.onTouchMove);
+                    chart.canvas.removeEventListener("touchstart", listeners.onTouchMove);
+                    chart.canvas.removeEventListener("touchend", listeners.onTouchEnd);
+                    chart.canvas.removeEventListener("touchcancel", listeners.onTouchEnd);
+                    delete (chart as any)._syncChartListeners;
+                }
+
+                this.unregisterChart(chart);
+            },
+        });
+
+        /**
+         * Places the yAxis above the chart
+         *
+         * @param id The chart axis id
+         * @returns Plugin applied features
          */
         public static readonly YAXIS_TITLE_POSITION = (id: ChartAxis) => {
-            return ({
+            return {
                 id: id,
                 afterDraw(chart, args, options: ChartOptions) {
-
                     /**
                      * Calculates the ticks width
                      *
-                     * @param currentScale the current scale
-                     * @param ctx the canvas rendering context
-                     * @returns the ticks width
+                     * @param currentScale The current scale
+                     * @param ctx The canvas rendering context
+                     * @returns The ticks width
                      */
                     function calculateTicksWidth(currentScale, ctx): number {
                         let maxTickWidth = 0;
-                        currentScale?.ticks?.forEach(tick => {
+                        currentScale?.ticks?.forEach((tick) => {
                             const labelWidth = ctx.measureText(tick.label).width;
                             if (labelWidth > maxTickWidth) {
                                 maxTickWidth = labelWidth;
@@ -129,8 +358,8 @@ export namespace ChartConstants {
                     /**
                      * Checks if current axis is left axis
                      *
-                     * @param left the margin to the left
-                     * @returns true, if left axis
+                     * @param left The margin to the left
+                     * @returns True, if left axis
                      */
                     function isLeftAxis(left: number) {
                         return left <= 100;
@@ -139,11 +368,11 @@ export namespace ChartConstants {
                     /**
                      * Calculates the x position for the y axis title
                      *
-                     * @param scale the current scale
-                     * @returns the horizontally centered position for the y axis title
+                     * @param scale The current scale
+                     * @returns The horizontally centered position for the y axis title
                      */
                     function calculateXPositionForTitle(chart, totalScaleWidth, scale: string): number {
-                        const rightAxes = [ChartAxis.RIGHT, ChartAxis.RIGHT_2].filter(axis => {
+                        const rightAxes = [ChartAxis.RIGHT, ChartAxis.RIGHT_2].filter((axis) => {
                             const scale = chart.scales[axis];
                             return scale && scale.options.display !== false;
                         });
@@ -202,7 +431,7 @@ export namespace ChartConstants {
                     ctx.fillText(text, calculateXPositionForTitle(chart, totalChartAreaWidth, id), 10);
                     ctx.restore();
                 },
-            });
+            };
         };
 
         public static readonly DEFAULT_EMPTY_SCREEN: (text: string) => ChartComponentLike = (text) => ({
@@ -225,8 +454,8 @@ export namespace ChartConstants {
         /**
          * Configuration for plugin {@link ChartDataLabels ChartDataLabels}
          *
-         * @param unit the unit to display
-         * @returns plugin configuration for {@link ChartDataLabels ChartDataLabels-plugin}
+         * @param unit The unit to display
+         * @returns Plugin configuration for {@link ChartDataLabels ChartDataLabels-plugin}
          */
         public static readonly BAR_CHART_DATALABELS = (unit: string, disable: boolean): any => ({
             ...ChartDataLabels,
@@ -236,17 +465,23 @@ export namespace ChartConstants {
                 return formatNumber(value, locale, "1.0-0") + "\xa0" + unit;
             },
             ...{
-                anchor: "end", offset: -18, align: "start", clip: false, clamp: true,
+                anchor: "end",
+                offset: -18,
+                align: "start",
+                clip: false,
+                clamp: true,
             },
             plugin: ChartDataLabels,
             display: disable,
         });
 
-
-        public static POINT_STYLE = (dataset: ChartDataset): Pick<LegendItem, "pointStyle" | "fillStyle" | "lineDash"> => {
-
+        public static POINT_STYLE = (
+            dataset: ChartDataset,
+        ): Pick<LegendItem, "pointStyle" | "fillStyle" | "lineDash"> => {
             if (dataset == null || dataset.backgroundColor == null) {
-                return { pointStyle: Chart.defaults.plugins.legend.labels.pointStyle };
+                return {
+                    pointStyle: Chart.defaults.plugins.legend.labels.pointStyle,
+                };
             }
 
             if ("borderDash" in dataset) {
@@ -268,12 +503,50 @@ export namespace ChartConstants {
         public static readonly RED: string = new RGBColor(255, 98, 63).toString();
         public static readonly GREEN: string = new RGBColor(14, 190, 84).toString();
         public static readonly ORANGE: string = new RGBColor(234, 147, 45).toString();
+        public static readonly PURPLE: string = new RGBColor(91, 92, 214).toString();
         public static readonly YELLOW: string = new RGBColor(255, 206, 0).toString();
-        public static readonly BLUE_GREY: string = new RGBColor(77, 106, 130).toString();
+        public static readonly TURQUOISE: string = new RGBColor(0, 204, 204).toString();
         public static readonly DARK_GREY: string = new RGBColor(169, 169, 169).toString();
+        public static readonly BLUE_GREY: string = new RGBColor(77, 106, 130).toString();
         public static readonly GREY: string = new RGBColor(189, 189, 189).toString();
+        public static readonly LIGHT_GREY: string = new RGBColor(160, 160, 160).toString();
         public static readonly BLACK: string = new RGBColor(0, 0, 0).toString();
+        public static readonly LIGHT_SKY_BLUE: string = "rgb(18, 184, 224)";
 
+        public static readonly SHADES_OF_GREEN: string[] = [
+            Colors.GREEN,
+            "rgb(11,152,67)",
+            "rgb(8,114,50)",
+            "rgb(6,76,34)",
+            "rgb(3,38,17)",
+        ];
+        public static readonly SHADES_OF_GREY: string[] = ["rgb(215,211,211)", "rgb(168,169,173)", "rgb(125,125,125)"];
+        public static readonly SHADES_OF_RED: string[] = [
+            Colors.RED,
+            "rgb(204,78,50)",
+            "rgb(153,59,38)",
+            "rgb(102,39,25)",
+            "rgb(51,20,13)",
+        ];
+        public static readonly SHADES_OF_YELLOW: string[] = [
+            Colors.YELLOW,
+            "rgb(204,165,0)",
+            "rgb(153,124,0)",
+            "rgb(102,82,0)",
+            "rgb(255,221,77)",
+        ];
+
+        public static readonly ESS_MODE_DELAY_DISCHARGE: string = "rgb(168, 50, 71)";
+        public static readonly ESS_MODE_BALANCING: string = Colors.LIGHT_SKY_BLUE;
+        public static readonly ESS_MODE_CHARGE_GRID: string = "rgb(0, 107, 82)";
+        public static readonly ESS_MODE_PEAK_SHAVING: string = "rgb(233, 120, 47)";
+        public static readonly ESS_MODE_DELAY_CHARGE: string = "rgb(73, 194, 168)";
+        public static readonly ESS_MODE_LIMIT_CHARGE: string = "rgb(0, 153, 120)";
+        public static readonly ESS_MODE_AVOID_FEED_IN_LIMIT: string = "rgb(107, 77, 255)";
+        public static readonly ESS_MODE_DISCHARGE_CONSUMPTION: string = "rgb(230, 69, 107)";
+        public static readonly ESS_MODE_DISCHARGE_GRID: string = Colors.RED;
+
+        // Theme-driven colors, resolved from CSS variables at access time
         public static get CONSUMPTION(): string { return cssRgb("--ion-color-consumption-rgb"); }
         public static get PRODUCTION(): string { return cssRgb("--ion-color-production-rgb"); }
         public static get STORAGE(): string { return cssRgb("--ion-color-storage-rgb"); }
@@ -306,22 +579,31 @@ export namespace ChartConstants {
     }
 
     /**
-   * Default yScale CartesianScaleTypeRegistry.linear
-   *
-   * @param yAxis the yAxis
-   * @param translate the translate service
-   * @param chartType the chartType
-   * @param datasets the chart datasets
-   * @returns scale options
-   */
-    export const DEFAULT_Y_SCALE_OPTIONS = (yAxis: HistoryUtils.yAxes, translate: TranslateService, chartType: "line" | "bar", datasets: ChartDataset[], showYAxisTitle?: boolean, formatNumber?: HistoryUtils.ChartData["tooltip"]["formatNumber"],) => {
+     * Default yScale CartesianScaleTypeRegistry.linear
+     *
+     * @param yAxis The yAxis
+     * @param translate The translate service
+     * @param chartType The chartType
+     * @param datasets The chart datasets
+     * @returns Scale options
+     */
+    export const DEFAULT_Y_SCALE_OPTIONS = (
+        yAxis: HistoryUtils.yAxes,
+        translate: TranslateService,
+        chartType: "line" | "bar",
+        datasets: ChartTypes.Dataset[],
+        showYAxisTitle?: boolean,
+        formatNumber?: HistoryUtils.ChartData["tooltip"]["formatNumber"],
+    ) => {
         const beginAtZero: boolean = ChartConstants.isDataSeriesPositive(datasets);
+
         const scaleOptions: ReturnType<typeof getScaleOptions> = getScaleOptions(datasets, yAxis, chartType);
-        const yScaleTitle = yAxis.customTitle ?? AbstractHistoryChart.getYAxisTitle(yAxis.unit, translate, chartType, yAxis.customTitle);
+        const yScaleTitle = yAxis.customTitle ?? getYAxisTitle(yAxis.unit, translate, chartType, yAxis.customTitle);
         if (showYAxisTitle) {
             Chart.register(ChartConstants.Plugins.YAXIS_TITLE_POSITION(yAxis.yAxisId));
         }
-        const axisDatasets = datasets.filter(d => d["yAxisID"] === yAxis.yAxisId);
+
+        const axisDatasets = datasets.filter((d) => d["yAxisID"] === yAxis.yAxisId);
 
         return {
             title: {
@@ -345,7 +627,9 @@ export namespace ChartConstants {
                 color: getComputedStyle(document.documentElement).getPropertyValue("--ion-color-text"),
                 padding: 5,
                 maxTicksLimit: ChartConstants.NUMBER_OF_Y_AXIS_TICKS,
-                ...(scaleOptions?.stepSize && { stepSize: scaleOptions.stepSize }),
+                ...(scaleOptions?.stepSize && {
+                    stepSize: scaleOptions.stepSize,
+                }),
                 callback: function (value, index, ticks) {
                     // if (index == (ticks.length - 1) && showYAxisTitle) {
                     //   const upperMostTick = element.customTitle ?? AbstractHistoryChart.getYAxisType(element.unit, translate, chartType);
@@ -357,80 +641,88 @@ export namespace ChartConstants {
                     return Formatter.formatSafely(value, formatNumber);
                 },
             },
-            display: axisDatasets?.some(d => !d.hidden) ?? true,
+            display: axisDatasets?.some((d) => !d.hidden) ?? true,
         };
     };
 
     /**
-   * Gets the scale options for all datasets of the passed yAxis
-   *
-   * @param datasets the datasets
-   * @param yAxis the yAxis
-   * @returns min, max and stepsize for datasets belonging to this yAxis
-   */
-    export function getScaleOptions(datasets: ChartDataset[], yAxis: HistoryUtils.yAxes, chartType: "line" | "bar"): { min: number; max: number; stepSize: number; } | null {
+     * Gets the scale options for all datasets of the passed yAxis
+     *
+     * @param datasets The datasets
+     * @param yAxis The yAxis
+     * @returns Min, max and stepsize for datasets belonging to this yAxis
+     */
+    export function getScaleOptions(
+        datasets: ChartTypes.Dataset[],
+        yAxis: HistoryUtils.yAxes,
+        chartType: "line" | "bar",
+    ): { min: number; max: number; stepSize: number } | null {
+        const stackMap: { [index: string]: ChartTypes.Dataset } = {};
+        datasets
+            ?.filter((el) => el["yAxisID"] === yAxis.yAxisId)
+            .forEach((dataset: ChartDataset, index) => {
+                const stackId = dataset.stack || "default"; // If no stack is defined, use "default"
 
-        const stackMap: { [index: string]: ChartDataset } = {};
-        datasets?.filter(el => el["yAxisID"] === yAxis.yAxisId).forEach((dataset, index) => {
-            const stackId = dataset.stack || "default"; // If no stack is defined, use "default"
+                if (dataset.hidden) {
+                    return;
+                }
 
-            if (dataset.hidden) {
-                return;
-            }
+                if (chartType === "line") {
+                    stackMap[index] = dataset;
+                    return;
+                }
 
-            if (chartType === "line") {
-                stackMap[index] = dataset;
-                return;
-            }
-
-            if (!(stackId in stackMap)) {
-                // If the stack doesn"t exist yet, create an entry
-                stackMap[stackId] = { ...dataset, data: [...dataset.data] };
-            } else {
-                // If the stack already exists, merge the data arrays
-                stackMap[stackId].data = stackMap[stackId].data.map((value, index) => {
-                    return Utils.addSafely(value as number, (dataset.data[index] as number)); // Sum data points or handle missing values
-                });
-            }
-        });
-
-        return Object.values(stackMap)
-            .reduce((arr: { min: number, max: number, stepSize: number }, dataset: ChartDataset) => {
-                let currMin: number | null;
-                if (yAxis.scale?.dynamicScale) {
-                    currMin = ArrayUtils.findSmallestNumber(dataset.data as number[]);
-
-                    if (chartType === "bar") {
-                        // to start the y-axis a few percent below the lowest value
-                        // Applies only bar charts with dynamic scale set to true (schedule charts)
-                        currMin = Math.floor(currMin - (currMin * 0.05));
-                    }
+                if (!(stackId in stackMap)) {
+                    // If the stack doesn"t exist yet, create an entry
+                    stackMap[stackId] = { ...dataset, data: [...dataset.data] };
                 } else {
-
-                    // Starts yAxis at least at 0
-                    currMin = ArrayUtils.findSmallestNumber([...dataset.data as number[], 0]);
+                    // If the stack already exists, merge the data arrays
+                    stackMap[stackId].data = stackMap[stackId].data.map((value, index) => {
+                        return Utils.addSafely(value as number, dataset.data[index] as number); // Sum data points or handle missing values
+                    });
                 }
+            });
 
-                const min = Math.floor(Math.min(...[arr.min, currMin].filter(el => el != null))) ?? null;
-                let max = Math.ceil(Math.max(arr.max, ArrayUtils.findBiggestNumber(dataset.data as number[]))) ?? null;
+        return (
+            Object.values(stackMap).reduce(
+                (arr: { min: number; max: number; stepSize: number }, dataset: ChartDataset) => {
+                    let currMin: number | null;
+                    if (yAxis.scale?.dynamicScale) {
+                        currMin = ArrayUtils.findSmallestNumber(dataset.data as number[]);
 
-                if (max === null || min === null) {
+                        if (chartType === "bar") {
+                            // to start the y-axis a few percent below the lowest value
+                            // Applies only bar charts with dynamic scale set to true (schedule charts)
+                            currMin = Math.floor(currMin - currMin * 0.05);
+                        }
+                    } else {
+                        // Starts yAxis at least at 0
+                        currMin = ArrayUtils.findSmallestNumber([...(dataset.data as number[]), 0]);
+                    }
+
+                    const min = Math.floor(Math.min(...[arr.min, currMin].filter((el) => el != null))) ?? null;
+                    let max =
+                        Math.ceil(Math.max(arr.max, ArrayUtils.findBiggestNumber(dataset.data as number[]))) ?? null;
+
+                    if (max === null || min === null) {
+                        return arr;
+                    }
+
+                    if (max === min) {
+                        max += 1;
+                    }
+
+                    arr = {
+                        min: min,
+                        max: max,
+                        stepSize: Math.max(arr?.stepSize ?? 0, ChartConstants.calculateStepSize(min, max)),
+                    };
+
                     return arr;
-                }
-
-                if (max === min) {
-                    max += 1;
-                }
-
-                arr = {
-                    min: min,
-                    max: max,
-                    stepSize: Math.max(arr?.stepSize ?? 0, ChartConstants.calculateStepSize(min, max)),
-                };
-
-                return arr;
-            }, { min: null, max: null, stepSize: null })
-            ?? null;
+                },
+                { min: null, max: null, stepSize: null },
+            ) ?? null
+        );
     }
 
     /**
@@ -490,11 +782,11 @@ export namespace ChartConstants {
             return [v, v, v];
         }
         const hue2rgb = (p: number, q: number, t: number) => {
-            if (t < 0) t += 1;
-            if (t > 1) t -= 1;
-            if (t < 1 / 6) return p + (q - p) * 6 * t;
-            if (t < 1 / 2) return q;
-            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            if (t < 0) {t += 1;}
+            if (t > 1) {t -= 1;}
+            if (t < 1 / 6) {return p + (q - p) * 6 * t;}
+            if (t < 1 / 2) {return q;}
+            if (t < 2 / 3) {return p + (q - p) * (2 / 3 - t) * 6;}
             return p;
         };
         const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
@@ -509,31 +801,37 @@ export namespace ChartConstants {
     /**
      * Calculates the stepSize
      *
-     * @param min the minimum
-     * @param max the maximum
-     * @returns the stepSize if max and min are not null and min is smaller than max
+     * @param min The minimum
+     * @param max The maximum
+     * @returns The stepSize if max and min are not null and min is smaller than max
      */
     export function calculateStepSize(min: number, max: number): number | null {
-
         if (min == null || max == null || min > max) {
             return null;
         }
 
         const difference = max - min;
 
-        return parseFloat(Utils.divideSafely(difference,
-            /* Subtracting 0, because there is always one interval less than amount of ticks*/
-            ChartConstants.NUMBER_OF_Y_AXIS_TICKS - 2).toString());
+        return parseFloat(
+            Utils.divideSafely(
+                difference,
+                /* Subtracting 0, because there is always one interval less than amount of ticks*/
+                ChartConstants.NUMBER_OF_Y_AXIS_TICKS - 2,
+            ).toString(),
+        );
     }
 
     /**
      * Checks if data series is positive.
      *
-     * @param datasets the chart datasets
-     * @returns true, if only positive data exists
+     * @param datasets The chart datasets
+     * @returns True, if only positive data exists
      */
-    export function isDataSeriesPositive(datasets: ChartDataset[]): boolean {
-        return datasets.filter(el => el != null).map(el => el.data).every(el => el.every(e => (e as number) >= 0));
+    export function isDataSeriesPositive(datasets: ChartTypes.Dataset[]): boolean {
+        return datasets
+            .filter((el) => el != null)
+            .map((el) => el.data)
+            .every((el) => el.every((e) => (e as number) >= 0));
     }
 }
 

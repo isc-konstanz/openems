@@ -389,7 +389,7 @@ public class MetadataFile extends AbstractMetadata implements Metadata,
 		var userEdgeIds = this.users.get(user.getUserId()).getEdges();
         var userEdges = this.edges.values()
         		.stream().filter(e -> userEdgeIds.contains(e.getId())).collect(Collectors.toList());        
-        return CompletableFuture.completedFuture(MetadataUtils.getPageDevice(user, userEdges, paginationOptions));
+        return CompletableFuture.completedFuture(MetadataUtils.getPageDevice(user, userEdges, FileEdge::getSettings, paginationOptions));
 	}
 
 	@Override
@@ -503,6 +503,13 @@ public class MetadataFile extends AbstractMetadata implements Metadata,
 						systemLog.getValues().entrySet().stream() //
 								.map(t -> t.getKey() + "=" + t.getValue()) //
 								.collect(joining(", "))));
+	}
+
+	@Override
+	public CompletableFuture<Void> updateEdgeSettings(String edgeId, JsonObject settings) {
+		var edge = this.edges.get(edgeId);
+		edge.setSettings(settings);
+		return CompletableFuture.completedFuture(null);
 	}
 
 }

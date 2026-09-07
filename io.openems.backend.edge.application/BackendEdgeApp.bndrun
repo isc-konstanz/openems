@@ -10,6 +10,7 @@ launcher.tmp = ${workspace}/cache/backend-edges
 -resolve.effective: active
 
 -runproperties: \
+    java.awt.headless=true,\
     felix.cm.dir=${launcher.var},\
     org.osgi.framework.storage=${launcher.tmp}, \
 	org.osgi.service.http.port=${launcher.port},\

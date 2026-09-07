@@ -15,6 +15,9 @@ public class RunningHandler extends StateHandler<State, Context> {
 		if (inverter.hasFaults()) {
 			return State.ERROR;
 		}
+		if (inverter.getStartStopTarget() == StartStop.STOP) {
+			return State.GO_STOPPED;
+		}
 
 		switch (inverter.getInverterState().asEnum()) {
 		case InverterState.FAULT:

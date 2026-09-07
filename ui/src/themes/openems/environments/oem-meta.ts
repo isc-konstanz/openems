@@ -2,10 +2,18 @@ import { alertCircleOutline, checkmarkDoneCircleOutline, flame, informationCircl
 import { BaseMeta } from "src/environments";
 
 export const OemMeta: BaseMeta = {
+    api: {
+        SYSTEM_OUTAGE: null,
+        CHANGELOG: {
+            REMOTE: "assets/json/changelog.json",
+            LOCAL: "assets/json/changelog.json",
+        },
+    },
     icons: {
         COMMON: {
             CONSUMPTION: "assets/img/icon/consumption.svg",
             SELFCONSUMPTION: "assets/img/icon/selfconsumption.svg",
+            GENERATOR: "assets/img/icon/generator.svg",
             GRID: "assets/img/icon/grid.svg",
             GRID_STORAGE: "assets/img/icon/gridStorage.svg",
             GRID_RESTRICTION: "assets/img/icon/gridRestriction.svg",
@@ -27,6 +35,13 @@ export const OemMeta: BaseMeta = {
                 SUNSHINE_DURATION: "assets/img/icon/sunshine_duration.svg",
                 HELP: "assets/img/icon/help.svg",
             },
+            OFFLINE: {
+                CLOUD_OFFLINE_OUTLINE: "icons/common/offline/cloud_offline_outline.svg",
+            },
+            TIME_OF_USE: {
+                TIME_OF_USE: "icons/common/time_of_use/time_of_use.svg",
+                TIME_OF_USE_THIN: "icons/common/time_of_use/time_of_use-thin.svg",
+            },
         },
         COMPONENT: {
             HEATPUMP: flame,
@@ -45,6 +60,12 @@ export const OemMeta: BaseMeta = {
             KEBA_P40: null,
             HARDY_BARTH: null,
             ALPITRONIC: null,
+            MENNEKES: null,
+        },
+        HEAT: {
+            ASKOMA: {
+                HEATING_ELEMENT: null,
+            },
         },
     },
     links: {
@@ -57,22 +78,26 @@ export const OemMeta: BaseMeta = {
             COMMON_GRID: null,
             COMMON_PRODUCTION: null,
             COMMON_SELFCONSUMPTION: null,
+            CONTROLLER_ESS_GRID_OPTIMIZED_CHARGE: "io.openems.edge.controller.ess.gridoptimizedcharge/readme.adoc",
+            CONTROLLER_IO_HEAT_PUMP_SG_READY: "io.openems.edge.controller.io.heatpump.sgready/readme.adoc",
+            CONTROLLER_IO_HEATING_ELEMENT: "io.openems.edge.controller.io.heatingelement/readme.adoc",
+            CONTROLLER_ESS_TIME_OF_USE_TARIFF: "io.openems.edge.controller.ess.timeofusetariff/readme.adoc",
             EVCS_KEBA: null,
             EVCS_HARDY_BARTH: null,
             EVCS_MENNEKES: null,
             EVCS_GO_E: null,
             EVCS_IES: null,
             EVCS_ALPITRONIC_HYPER: null,
+            SETTINGS_ALERTING: null,
+            SETTINGS_NETWORK_CONFIGURATION: null,
+            WEATHER_WIDGET: null,
+            OFFLINE_INSTRUCTIONS: null,
         },
         FORGET_PASSWORD: "#",
         EVCS: null,
-        CONTROLLER_ESS_GRID_OPTIMIZED_CHARGE: "io.openems.edge.controller.ess.gridoptimizedcharge/readme.adoc",
         CONTROLLER_CHP_SOC: "io.openems.edge.controller.chp.soc/readme.adoc",
         CONTROLLER_IO_CHANNEL_SINGLE_THRESHOLD: "io.openems.edge.controller.io.channelsinglethreshold/readme.adoc",
         CONTROLLER_IO_FIX_DIGITAL_OUTPUT: "io.openems.edge.controller.io.fixdigitaloutput/readme.adoc",
-        CONTROLLER_IO_HEAT_PUMP_SG_READY: "io.openems.edge.controller.io.heatpump.sgready/readme.adoc",
-        CONTROLLER_IO_HEATING_ELEMENT: "io.openems.edge.controller.io.heatingelement/readme.adoc",
-        CONTROLLER_ESS_TIME_OF_USE_TARIFF: "io.openems.edge.controller.ess.timeofusetariff/readme.adoc",
 
         CONTROLLER_API_MODBUSTCP_READ: "io.openems.edge.controller.api.modbus/readme.adoc",
         CONTROLLER_API_MODBUSTCP_READWRITE: "io.openems.edge.controller.api.modbus/readme.adoc",
@@ -80,8 +105,6 @@ export const OemMeta: BaseMeta = {
         CONTROLLER_API_REST_READ: "io.openems.edge.controller.api.rest/readme.adoc",
         CONTROLLER_API_REST_READWRITE: "io.openems.edge.controller.api.rest/readme.adoc",
 
-        SETTINGS_ALERTING: null,
-        SETTINGS_NETWORK_CONFIGURATION: null,
         EVCS_CLUSTER: "io.openems.edge.evcs.cluster/readme.adoc",
 
         SYSTEM: {

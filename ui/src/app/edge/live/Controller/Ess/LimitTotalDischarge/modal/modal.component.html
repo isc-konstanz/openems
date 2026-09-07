@@ -1,0 +1,77 @@
+<ion-header>
+  <ion-toolbar class="ion-justify-content-center"
+    style="--background: var(--ion-color-toolbar-primary); color: var(--ion-title-color);">
+    <ion-title>{{ component.alias }}</ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="modalCtrl.dismiss()">
+        <ion-icon name="close-outline" style="color: var(--ion-title-color);"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  @if (!loading) {
+    @if (edge.roleIsAtLeast('owner')) {
+      <ion-card-content>
+        <form [formGroup]="formGroup">
+          <table class="full_width">
+            <tr>
+              <td style="width: 65%" translate>
+                EDGE.INDEX.WIDGETS.LIMIT_TOTAL_DISCHARGE.FORCE_CHARGE_POWER
+              </td>
+              <td style="width: 35%" class="align_right">
+                <ion-item lines="inset" class="noPadding">
+                  <ion-input class="regularFont" type="number" formControlName="forceChargePower"
+                    style="text-align: end;" label="&nbsp;W">
+                  </ion-input>
+                </ion-item>
+              </td>
+            </tr>
+          </table>
+          <table class="full_width">
+            <tr>
+              <td style="width: 65%" translate>
+                EDGE.INDEX.WIDGETS.LIMIT_TOTAL_DISCHARGE.FORCE_CHARGE_SOC
+              </td>
+              <td style="width: 35%" class="align_right">
+                <ion-item lines="inset" class="noPadding">
+                  <ion-input class="regularFont" type="number" formControlName="forceChargeSoc"
+                    style="text-align: end;" label="&nbsp;%">
+                  </ion-input>
+                </ion-item>
+              </td>
+            </tr>
+          </table>
+          <table class="full_width">
+            <tr>
+              <td style="width: 65%" translate>
+                EDGE.INDEX.WIDGETS.LIMIT_TOTAL_DISCHARGE.MIN_SOC
+              </td>
+              <td style="width: 35%" class="align_right">
+                <ion-item lines="inset" class="noPadding">
+                  <ion-input class="regularFont" type="number" formControlName="minSoc" style="text-align: end;"
+                    label="&nbsp;%">
+                  </ion-input>
+                </ion-item>
+              </td>
+            </tr>
+          </table>
+        </form>
+      </ion-card-content>
+    }
+  }
+  @if (formGroup.dirty) {
+    <ion-fab class="ion-padding-bottom" vertical="bottom" horizontal="end" slot="fixed">
+      <ion-fab-button (click)="applyChanges()">
+        <ion-icon size="large" name="oe-checkmark">
+        </ion-icon>
+      </ion-fab-button>
+    </ion-fab>
+  }
+  @if (loading === true) {
+    <ion-grid>
+      <ion-progress-bar type="indeterminate"></ion-progress-bar>
+    </ion-grid>
+  }
+</ion-content>

@@ -118,8 +118,8 @@ export class SchedulePowerChartComponent extends AbstractHistoryChart implements
                 order: 1,
             });
             this.colors.push({
-                backgroundColor: ColorUtils.rgbStringToRgba(ChartConstants.Colors.PURPLE, 0.2),
-                borderColor: ChartConstants.Colors.PURPLE,
+                backgroundColor: ColorUtils.rgbStringToRgba(ChartConstants.Colors.GRID_SELL, 0.2),
+                borderColor: ChartConstants.Colors.GRID_SELL,
             });
 
             datasets.push({

@@ -7,7 +7,7 @@ import { ChannelAddress, ChartConstants, EdgeConfig } from "src/app/shared/share
 import { ChartAxis, HistoryUtils, Utils, YAxisType } from "src/app/shared/utils/utils";
 
 @Component({
-    selector: "totalChart",
+    selector: "oe-controller-io-digital-output-chart",
     templateUrl: "../../../../../../shared/components/chart/abstracthistorychart.html",
     standalone: false,
 })
@@ -41,10 +41,10 @@ export class TotalChartComponent extends AbstractHistoryChart {
                         },
                         converter: () => {
                             return data[controller.id]
-                            // TODO add logic to not have to adjust non power data manually
+                                // TODO add logic to not have to adjust non power data manually
                                 .map(val => Utils.multiplySafely(val, 1000));
                         },
-                        color: ChartConstants.Colors.SHADES_OF_YELLOW[i % (ChartConstants.Colors.SHADES_OF_YELLOW.length - 1)],
+                        color: ChartConstants.Colors.SHADES_OF_CONSUMPTION[i % (ChartConstants.Colors.SHADES_OF_CONSUMPTION.length - 1)],
                         stack: 0,
                     });
                 }

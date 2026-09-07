@@ -110,7 +110,7 @@ export class ChartComponent extends AbstractHistoryChart {
                         nameSuffix: (energyValues: QueryHistoricTimeseriesEnergyResponse) =>
                             energyValues?.result.data["_sum/GridSellActiveEnergy"] ?? null,
                         converter: () => data["GridSell"],
-                        color: ChartConstants.Colors.PURPLE,
+                        color: ChartConstants.Colors.GRID_SELL,
                         stack: 1,
                     },
                     {
@@ -118,7 +118,7 @@ export class ChartComponent extends AbstractHistoryChart {
                         nameSuffix: (energyValues: QueryHistoricTimeseriesEnergyResponse) =>
                             energyValues?.result.data["_sum/GridBuyActiveEnergy"] ?? null,
                         converter: () => data["GridBuy"],
-                        color: ChartConstants.Colors.BLUE_GREY,
+                        color: ChartConstants.Colors.GRID_BUY,
                         stack: 0,
                     },
                 ];

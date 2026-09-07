@@ -86,7 +86,7 @@ public class GetNetworkInfo implements EndpointRequestType<EmptyObject, Response
 				return new GetNetworkInfo.Route(//
 						json.getString("dst"), //
 						json.getString("dev"), //
-						json.getString("protocol"), //
+						json.getStringOrNull("protocol"), //
 						json.getOptionalString("scope").orElse("link"), //
 						json.getStringParsedOrNull("prefsrc",
 								new Inet4AddressWithSubnetmask.StringParserInet4Address()), //

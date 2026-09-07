@@ -1,10 +1,13 @@
 // @ts-strict-ignore
-import { Component } from "@angular/core";
+import { Component, ViewChild } from "@angular/core";
 import { TranslateService } from "@ngx-translate/core";
+import { BaseChartDirective } from "ng2-charts";
 import { AbstractHistoryChart } from "src/app/shared/components/chart/abstracthistorychart";
 import { ChartConstants } from "src/app/shared/components/chart/chart.constants";
+import { ViewUtils } from "src/app/shared/components/navigation/view/shared/shared";
 import { QueryHistoricTimeseriesEnergyResponse } from "src/app/shared/jsonrpc/response/queryHistoricTimeseriesEnergyResponse";
 import { ChannelAddress, EdgeConfig, Utils } from "src/app/shared/shared";
+import { NumberUtils } from "src/app/shared/utils/number/number-utils";
 import { ChartAxis, HistoryUtils, YAxisType } from "src/app/shared/utils/utils";
 
 @Component({
@@ -13,6 +16,7 @@ import { ChartAxis, HistoryUtils, YAxisType } from "src/app/shared/utils/utils";
     standalone: false,
 })
 export class ChartComponent extends AbstractHistoryChart {
+    @ViewChild(BaseChartDirective) private chart?: BaseChartDirective;
 
     public static getChartData(config: EdgeConfig | null, chartType: "line" | "bar", translate: TranslateService): HistoryUtils.ChartData {
         const input: HistoryUtils.InputChannel[] =
@@ -81,7 +85,7 @@ export class ChartComponent extends AbstractHistoryChart {
                         name: translate.instant("GENERAL.PRODUCTION"),
                         nameSuffix: (energyValues: QueryHistoricTimeseriesEnergyResponse) => energyValues.result.data["_sum/ProductionActiveEnergy"],
                         converter: () => data["ProductionActivePower"],
-                        color: ChartConstants.Colors.YELLOW,
+                        color: ChartConstants.Colors.PRODUCTION,
                         stack: 0,
                         hiddenOnInit: chartType == "line" ? false : true,
                         order: 1,
@@ -96,7 +100,7 @@ export class ChartComponent extends AbstractHistoryChart {
                         converter: () =>
                             data["ProductionActivePower"]?.map((value, index) => Utils.subtractSafely(value, data["GridSell"][index], data["EssCharge"][index]))
                                 ?.map(value => HistoryUtils.ValueConverter.NEGATIVE_AS_ZERO(value)),
-                        color: ChartConstants.Colors.ORANGE,
+                        color: ChartConstants.Colors.HEAT,
                         stack: [1, 2],
                         order: 2,
                     }],
@@ -109,7 +113,7 @@ export class ChartComponent extends AbstractHistoryChart {
                             ? data["EssCharge"]?.map((value, index) => {
                                 return HistoryUtils.ValueConverter.POSITIVE_AS_ZERO_AND_INVERT_NEGATIVE(Utils.subtractSafely(value, data["ProductionDcActual"]?.[index]));
                             }) : data["EssCharge"],
-                        color: ChartConstants.Colors.GREEN,
+                        color: ChartConstants.Colors.STORAGE_CHARGE,
                         stack: 1,
                         ...(chartType === "line" && { order: 6 }),
                     },
@@ -124,7 +128,7 @@ export class ChartComponent extends AbstractHistoryChart {
                                     return HistoryUtils.ValueConverter.NEGATIVE_AS_ZERO(Utils.subtractSafely(value, data["ProductionDcActual"]?.[index]));
                                 }) : data["EssDischarge"];
                         },
-                        color: ChartConstants.Colors.RED,
+                        color: ChartConstants.Colors.STORAGE_DISCHARGE,
                         stack: 2,
                         ...(chartType === "line" && { order: 5 }),
                     },
@@ -134,7 +138,7 @@ export class ChartComponent extends AbstractHistoryChart {
                         name: translate.instant("GENERAL.GRID_SELL_ADVANCED"),
                         nameSuffix: (energyValues: QueryHistoricTimeseriesEnergyResponse) => energyValues.result.data["_sum/GridSellActiveEnergy"],
                         converter: () => data["GridSell"],
-                        color: ChartConstants.Colors.YELLOW_GREY,
+                        color: ChartConstants.Colors.GRID_SELL,
                         stack: 1,
                         ...(chartType === "line" && { order: 4 }),
                     },
@@ -144,7 +148,7 @@ export class ChartComponent extends AbstractHistoryChart {
                         name: translate.instant("GENERAL.GRID_BUY_ADVANCED"),
                         nameSuffix: (energyValues: QueryHistoricTimeseriesEnergyResponse) => energyValues.result.data["_sum/GridBuyActiveEnergy"],
                         converter: () => data["GridBuy"],
-                        color: ChartConstants.Colors.BLUE_GREY,
+                        color: ChartConstants.Colors.GRID_BUY,
                         stack: 2,
                         ...(chartType === "line" && { order: 2 }),
                     },
@@ -154,7 +158,7 @@ export class ChartComponent extends AbstractHistoryChart {
                         name: translate.instant("GENERAL.CONSUMPTION"),
                         nameSuffix: (energyValues: QueryHistoricTimeseriesEnergyResponse) => energyValues.result.data["_sum/ConsumptionActiveEnergy"],
                         converter: () => data["Consumption"],
-                        color: ChartConstants.Colors.BLUE,
+                        color: ChartConstants.Colors.CONSUMPTION,
                         stack: 3,
                         hiddenOnInit: chartType == "line" ? false : true,
                         ...(chartType === "line" && { order: 0 }),
@@ -210,8 +214,11 @@ export class ChartComponent extends AbstractHistoryChart {
         return ChartComponent.getChartData(this.config, this.chartType, this.translate);
     }
 
-    protected override getChartHeight(): number {
-        return this.service.deviceHeight / 2;
+    public override ngAfterViewInit(): void {
+        setTimeout(() => {
+            this.viewHeight = NumberUtils.divideSafely(ViewUtils.getChartContentHeightInVh(window.innerHeight, this.navigationService.position()), 2);
+            this.chart?.chart?.resize();
+            this.chart?.update();
+        }, 100);
     }
-
 }

@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
+import io.openems.edge.common.startstop.StartStop;
 import io.openems.edge.common.statemachine.StateHandler;
 import io.openems.edge.pvinverter.hopewind.InverterState;
 import io.openems.edge.pvinverter.hopewind.statemachine.StateMachine.State;
@@ -16,12 +17,17 @@ public class GoRunningHandler extends StateHandler<State, Context> {
 	protected void onEntry(Context context) throws OpenemsNamedException {
 		var inverter = context.getParent();
 		inverter._setMaxStartAttempts(false);
-		this.entryAt = Instant.now();
+		this.entryAt = Instant.now(context.clock);
 	}
 
 	@Override
 	public State runAndGetNextState(Context context) throws OpenemsNamedException {
 		var inverter = context.getParent();
+
+		if (inverter.getStartStopTarget() == StartStop.STOP) {
+			// Target changed while starting -> re-evaluate
+			return State.UNDEFINED;
+		}
 
 		switch (inverter.getInverterState().asEnum()) {
 		case InverterState.FAULT:
@@ -35,7 +41,7 @@ public class GoRunningHandler extends StateHandler<State, Context> {
 		case InverterState.STANDBY:
 		case InverterState.SELF_TEST:
 		case InverterState.STARTING:
-			if (Duration.between(this.entryAt, Instant.now()).getSeconds() > 300) {
+			if (Duration.between(this.entryAt, Instant.now(context.clock)).getSeconds() > 300) {
 				// Try again to reset
 				return State.ERROR;
 			}

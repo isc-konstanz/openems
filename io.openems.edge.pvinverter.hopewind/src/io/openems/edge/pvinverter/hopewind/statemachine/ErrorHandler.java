@@ -13,14 +13,14 @@ public class ErrorHandler extends StateHandler<State, Context> {
 
 	@Override
 	protected void onEntry(Context context) throws OpenemsNamedException {
-		this.entryAt = Instant.now();
+		this.entryAt = Instant.now(context.clock);
 	}
 
 	@Override
 	public State runAndGetNextState(Context context) throws OpenemsNamedException {
 		var inverter = context.getParent();
 
-		if (Duration.between(this.entryAt, Instant.now()).getSeconds() <= 60) {
+		if (Duration.between(this.entryAt, Instant.now(context.clock)).getSeconds() <= 60) {
 			return State.ERROR;
 		}
 

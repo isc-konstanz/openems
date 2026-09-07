@@ -58,21 +58,11 @@ public class ControllerEssPeakShavingImpl extends AbstractOpenemsComponent
 
 	@Override
 	public void run() throws OpenemsNamedException {
-		ManagedSymmetricEss ess = this.componentManager.getComponent(this.config.ess_id());
-		ElectricityMeter meter = this.componentManager.getComponent(this.config.meter_id());
+		final ManagedSymmetricEss ess = this.componentManager.getComponent(this.config.ess_id());
+		final ElectricityMeter meter = this.componentManager.getComponent(this.config.meter_id());
 
-		/*
-		 * Check that we are On-Grid (and warn on undefined Grid-Mode)
-		 */
-		var gridMode = ess.getGridMode();
-		if (gridMode.isUndefined()) {
-			this.logWarn(this.log, "Grid-Mode is [UNDEFINED]");
-		}
-		switch (gridMode) {
-		case ON_GRID:
-		case UNDEFINED:
-			break;
-		case OFF_GRID:
+		// Check that we are On-Grid (and warn on undefined Grid-Mode)
+		if (!ess.isOnGridOrUndefined(m -> this.logWarn(this.log, m))) {
 			return;
 		}
 
@@ -95,15 +85,19 @@ public class ControllerEssPeakShavingImpl extends AbstractOpenemsComponent
 
 		} else {
 			/*
-			 * Do nothing
+			 * There is o active peak to shave and no recharge required. Assert the peak ceiling
+			 * as a lower bound on power, so that a Controller scheduled after the Peak-Shaving
+			 * cannot import power above peakShavingPower.
 			 */
-			calculatedPower = 0;
+			calculatedPower = gridPower - this.config.peakShavingPower();
+			ess.setActivePowerGreaterOrEquals(calculatedPower);
+			return;
 		}
 
 		/*
 		 * set result
 		 */
-		ess.setActivePowerEqualsWithPid(calculatedPower);
-		ess.setReactivePowerEquals(0);
+		ess.setActivePowerEqualsWithFilter(calculatedPower);
+		ess.setReactivePowerEqualsWithoutFilter(0);
 	}
 }

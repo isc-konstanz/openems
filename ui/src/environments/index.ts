@@ -4,7 +4,7 @@ import { DefaultTypes } from "src/app/shared/type/defaulttypes";
 export { environment } from "./dummy";
 
 export type Theme = "OpenEMS";
-export type BaseMeta = Pick<Environment, "icons" | "links" | "images">;
+export type BaseMeta = Pick<Environment, "icons" | "api" | "links" | "images">;
 
 export interface Environment {
     readonly theme: Theme;
@@ -13,6 +13,10 @@ export interface Environment {
     readonly uiTitleShort: string;
     readonly edgeShortName: string;
     readonly edgeLongName: string;
+    readonly headerLogo?: string;
+    readonly headerTitleShow?: boolean;
+    readonly headerTitleHtml?: string;
+    readonly footerTextHtml?: string;
     readonly defaultLanguage: string;
 
     readonly url: string;
@@ -23,10 +27,18 @@ export interface Environment {
 
 
     readonly docsUrlPrefix: string;
+    readonly api: {
+        readonly SYSTEM_OUTAGE: string | null,
+        readonly CHANGELOG: {
+            readonly REMOTE: string,
+            readonly LOCAL: string,
+        }
+    },
     readonly icons: {
         readonly "COMMON": {
             readonly "CONSUMPTION": string,
             readonly "SELFCONSUMPTION": string,
+            readonly "GENERATOR": string,
             readonly "GRID": string,
             readonly "GRID_STORAGE": string,
             readonly "GRID_RESTRICTION": string,
@@ -49,6 +61,13 @@ export interface Environment {
                 readonly "SUNSHINE_DURATION": string,
                 readonly "HELP": string,
             },
+            readonly "OFFLINE": {
+                readonly "CLOUD_OFFLINE_OUTLINE": string,
+            },
+            readonly "TIME_OF_USE": {
+                readonly "TIME_OF_USE": string,
+                readonly "TIME_OF_USE_THIN": string,
+            },
         },
         readonly "COMPONENT": {
             readonly "HEATPUMP": string,
@@ -67,7 +86,13 @@ export interface Environment {
             readonly KEBA_P40: string | null,
             readonly HARDY_BARTH: string | null,
             readonly ALPITRONIC: string | null,
+            readonly MENNEKES: string | null,
         },
+        readonly HEAT: {
+            readonly "ASKOMA": {
+                readonly HEATING_ELEMENT: string | null,
+            }
+        }
     },
     readonly links: {
         readonly REDIRECT: {
@@ -78,6 +103,12 @@ export interface Environment {
             readonly COMMON_GRID: string | null,
             readonly COMMON_PRODUCTION: string | null,
             readonly COMMON_SELFCONSUMPTION: string | null,
+            readonly OFFLINE_INSTRUCTIONS: string | null,
+
+            readonly CONTROLLER_IO_HEAT_PUMP_SG_READY: string,
+            readonly CONTROLLER_IO_HEATING_ELEMENT: string,
+            readonly CONTROLLER_ESS_TIME_OF_USE_TARIFF: string,
+            readonly CONTROLLER_ESS_GRID_OPTIMIZED_CHARGE: string,
 
             readonly EVCS_KEBA: string | null,
             readonly EVCS_HARDY_BARTH: string | null,
@@ -85,6 +116,10 @@ export interface Environment {
             readonly EVCS_GO_E: string | null,
             readonly EVCS_IES: string | null,
             readonly EVCS_ALPITRONIC_HYPER: string | null,
+
+            readonly SETTINGS_ALERTING: string | null,
+            readonly SETTINGS_NETWORK_CONFIGURATION: string | null,
+            readonly WEATHER_WIDGET: string | null,
         }
 
 
@@ -92,13 +127,9 @@ export interface Environment {
         readonly FORGET_PASSWORD: string,
         readonly EVCS: string | null,
 
-        readonly CONTROLLER_ESS_GRID_OPTIMIZED_CHARGE: string,
         readonly CONTROLLER_CHP_SOC: string
         readonly CONTROLLER_IO_CHANNEL_SINGLE_THRESHOLD: string,
         readonly CONTROLLER_IO_FIX_DIGITAL_OUTPUT: string,
-        readonly CONTROLLER_IO_HEAT_PUMP_SG_READY: string,
-        readonly CONTROLLER_IO_HEATING_ELEMENT: string,
-        readonly CONTROLLER_ESS_TIME_OF_USE_TARIFF: string,
 
         readonly CONTROLLER_API_MODBUSTCP_READ: string,
         readonly CONTROLLER_API_MODBUSTCP_READWRITE: string,
@@ -106,8 +137,6 @@ export interface Environment {
         readonly CONTROLLER_API_REST_READ: string,
         readonly CONTROLLER_API_REST_READWRITE: string,
 
-        readonly SETTINGS_ALERTING: string | null,
-        readonly SETTINGS_NETWORK_CONFIGURATION: string | null,
         readonly EVCS_CLUSTER: string,
 
         readonly WARRANTY: {

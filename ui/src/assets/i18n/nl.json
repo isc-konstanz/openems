@@ -143,6 +143,9 @@
       },
       "WIDGETS": {
         "AUTARCHY_INFO": "Autarky geeft het percentage huidig ​​vermogen aan dat kan worden gedekt door opwekking en ontlading van de opslag.",
+        "BALANCING": {
+          "GRID_SETPOINT_TARGET": "Grid draw setpoint"
+        },
         "CHANNELTRESHOLD": {
           "OUTPUT": "uitgang"
         },
@@ -308,6 +311,12 @@
         },
         "INFO_STORAGE_FOR_CHARGE": "Negatieve waarden komen overeen met het laden van geheugen",
         "INFO_STORAGE_FOR_DISCHARGE": "Positieve waarden komen overeen met geheugenontlading",
+        "LIMIT_TOTAL_DISCHARGE": {
+          "FORCE_CHARGE_POWER": "Geforceerd opladen met",
+          "FORCE_CHARGE_SOC": "Geforceerd opladen onder",
+          "MIN_SOC": "Minimale laadtoestand",
+          "RELATION_ERROR": "De grens voor geforceerd opladen moet kleiner zijn dan of gelijk zijn aan de minimale laadtoestand"
+        },
         "PEAKSHAVING": {
           "ASYMMETRIC_INFO": "De ingevoerde prestatiewaarden verwijzen naar afzonderlijke fasen. Het is aangepast aan de meest gestresste fase.",
           "END_DATE": "Einddatum",

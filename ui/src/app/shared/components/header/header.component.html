@@ -2,7 +2,7 @@
   <ion-header #appHeader>
     <ion-toolbar style="--background: var(--ion-color-toolbar-primary);" mode="md">
       @if (backUrl) {
-        <ion-buttons slot="start">
+        <ion-buttons slot="start" style="padding-inline-start: 4px">
           @if (showBackButton) {
             <oe-flat-button [link]="{ text: backUrl}" color="light">
               <ion-icon [ngStyle]="{'color': 'var(--ion-menu-color)'}" name="arrow-back-outline"></ion-icon>
@@ -10,8 +10,8 @@
           }
         </ion-buttons>
       }
-      @if (enableSideMenu && navigationService.position() !== null) {
-        <ion-buttons slot="start">
+      @if (enableSideMenu && navigationService.position() !== 'left') {
+        <ion-buttons slot="start" style="padding-inline-start: 4px">
           <ion-button (keydown.enter)="toggleMenu()" (click)="toggleMenu()" class="custom-menu-button">
             <ion-icon slot="icon-only" name="menu"></ion-icon>
           </ion-button>
@@ -20,16 +20,41 @@
       }
       <!-- page title is shown if the current page isn't Live nor History -->
       @if ((currentPage !== 'IndexLive' && currentPage !== 'IndexHistory')) {
-        <ion-title style="color: var(--ion-title-color);" class="ion-hide-md-up" slot="start">
-          {{ service.currentPageTitle }}
+        <ion-title class="ion-hide-md-up" slot="start"
+          [ngStyle]="(backUrl || enableSideMenu) ?
+            {'padding-inline-start': '4px', 'color': 'var(--ion-title-color)'} : {'color': 'var(--ion-title-color)'}">
+          @if (environment.headerLogo) {
+            <img [src]="environment.headerLogo" [alt]="service.currentPageTitle"
+              style="height: 32px; width: auto; object-fit: contain; vertical-align: middle;">
+          }
+          @if (environment.headerTitleShow !== false) {
+            @if (environment.headerTitleHtml) {
+              <span [innerHTML]="environment.headerTitleHtml"></span>
+            } @else {
+              {{ service.currentPageTitle }}
+            }
+          }
         </ion-title>
       }
       <!-- page title is hidden when 'smartphone resolution' is reached -->
-      <ion-title class="ion-hide-md-down" slot="start" style="color: var(--ion-title-color);">
-        {{ service.currentPageTitle }}
+      <ion-title class="ion-hide-md-down" slot="start"
+         [ngStyle]="(backUrl || enableSideMenu) ?
+            {'padding-inline-start': '4px', 'color': 'var(--ion-title-color)'} : {'color': 'var(--ion-title-color)'}">
+        @if (environment.headerLogo) {
+          <img [src]="environment.headerLogo" [alt]="service.currentPageTitle"
+            style="height: 32px; width: auto; object-fit: contain; vertical-align: middle;">
+        }
+        @if (environment.headerTitleShow !== false) {
+          @if (environment.headerTitleHtml) {
+            <span [innerHTML]="environment.headerTitleHtml"></span>
+          } @else {
+            {{ service.currentPageTitle }}
+          }
+        }
       </ion-title>
       @if (service.currentEdge(); as edge) {
-        @if ((currentPage === 'IndexLive' || currentPage === 'IndexHistory') && navigationService.position() !== null && navigationService.position() === 'disabled') {
+        @if ((currentPage === 'IndexLive' || currentPage === 'IndexHistory') && navigationService.position() !== null &&
+        navigationService.position() === 'disabled') {
           <ion-segment mode="md" (ionChange)="segmentChanged($event)" [(ngModel)]="currentPage"
             class="ion-justify-content-center">
             <ion-segment-button tabindex="0" class="focus-visible"
@@ -53,7 +78,7 @@
       <ion-title class="ion-hide-md-down" slot="end">
       </ion-title>
       <ion-buttons slot="end" class="ion-padding-end">
-        @if (currentPage === 'IndexLive' || currentPage === 'IndexHistory' || currentPage === 'EdgeSettings') {
+        @if(edge() !== null){
           <oe-system-status></oe-system-status>
         }
         @if (service.currentEdge(); as edge) {

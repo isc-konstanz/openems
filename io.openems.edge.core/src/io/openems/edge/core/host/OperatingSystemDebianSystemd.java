@@ -3,15 +3,9 @@ package io.openems.edge.core.host;
 import static io.openems.common.jsonrpc.serialization.JsonSerializerUtil.jsonObjectSerializer;
 import static io.openems.common.utils.FunctionUtils.doNothing;
 import static io.openems.common.utils.InetAddressUtils.parseOrNull;
-import static java.lang.Runtime.getRuntime;
-import static java.util.concurrent.CompletableFuture.runAsync;
-import static java.util.concurrent.CompletableFuture.supplyAsync;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.Inet4Address;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -20,21 +14,19 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,10 +41,10 @@ import io.openems.common.jsonrpc.serialization.JsonSerializer;
 import io.openems.common.types.ConfigurationProperty;
 import io.openems.common.utils.InetAddressUtils;
 import io.openems.common.utils.JsonUtils;
-import io.openems.common.utils.StringUtils;
 import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.common.update.Updateable;
 import io.openems.edge.common.user.User;
+import io.openems.edge.core.host.Bash.Command;
 import io.openems.edge.core.host.NetworkInterface.IpMasqueradeSetting;
 import io.openems.edge.core.host.jsonrpc.ExecuteSystemCommandRequest;
 import io.openems.edge.core.host.jsonrpc.ExecuteSystemCommandRequest.SystemCommand;
@@ -72,35 +64,57 @@ import io.openems.edge.core.host.jsonrpc.SetNetworkConfig;
 public class OperatingSystemDebianSystemd implements OperatingSystem {
 
 	private static final String NETWORK_BASE_PATH = "/etc/systemd/network";
+	private static final String NETWORK_MANAGER_BASE_PATH = "/etc/NetworkManager/system-connections";
+	private static final String NETWORK_MANAGER_RUN_PATH = "/run/NetworkManager/system-connections";
 	private static final Path UDEV_PATH = Paths.get("/etc/udev/rules.d/99-usb-serial.rules");
-	private static final int DEFAULT_METRIC = 1024;
+	private static final int DEFAULT_DHCP_ROUTE_METRIC = 1024;
 	private static final String MATCH_SECTION = "[Match]";
 	private static final String NETWORK_SECTION = "[Network]";
 	private static final String ROUTE_SECTION = "[Route]";
 	private static final String DHCP_SECTION = "[DHCP]";
 	private static final String ADDRESS_SECTION = "[Address]";
+	private static final String CONNECTION_SECTION = "[connection]";
+	private static final String IPV4_SECTION = "[ipv4]";
+	private static final String IPV6_SECTION = "[ipv6]";
 	private static final String EMPTY_SECTION = "";
 
-	private static enum Block {
+	private static final Logger log = LoggerFactory.getLogger(OperatingSystemDebianSystemd.class);
+
+	/**
+	 * Identifies the network stack that manages the interfaces on this host.
+	 * Detected once at construction via {@code systemctl is-active}.
+	 */
+	private static enum NetworkService {
+		UNDEFINED, SYSTEMD_NETWORKD, NETWORK_MANAGER
+	}
+
+	private static enum NetworkdBlock {
 		UNDEFINED, MATCH, NETWORK, ADDRESS, ROUTE, DHCP
 	}
 
-	private final HostImpl parent;
+	private static enum NetworkManagerBlock {
+		UNDEFINED, CONNECTION, IPV4
+	}
 
-	protected OperatingSystemDebianSystemd(HostImpl parent) {
-		this.parent = parent;
+	private final NetworkService network;
+
+	protected OperatingSystemDebianSystemd() {
+		this.network = detectNetwork();
 	}
 
 	@Override
 	public NetworkConfiguration getNetworkConfiguration() throws OpenemsNamedException {
-		var path = Paths.get(NETWORK_BASE_PATH).toFile();
-		if (!path.exists()) {
-			throw new OpenemsException("Base-Path [" + path + "] does not exist.");
-		}
+		return switch (this.network) {
+		case NETWORK_MANAGER -> this.readNetworkManagerConfig();
+		case SYSTEMD_NETWORKD -> this.readNetworkdConfig();
+		case UNDEFINED -> throw new OpenemsException("Network service undefined");
+		};
+	}
 
+	private NetworkConfiguration readNetworkdConfig() throws OpenemsNamedException {
 		var interfaces = new TreeMap<String, NetworkInterface<?>>();
 
-		for (final File file : path.listFiles()) {
+		for (final File file : this.readNetworkConfigFiles(NETWORK_BASE_PATH)) {
 			/*
 			 * Read all systemd network configuration files
 			 */
@@ -111,7 +125,7 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 				/*
 				 * Parse the content of the network configuration file
 				 */
-				var lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
+				var lines = this.handleExecuteSystemReadFile(file.toPath());
 				NetworkInterface<File> networkInterface = parseSystemdNetworkdConfigurationFile(lines, file);
 
 				// check for null value
@@ -120,7 +134,7 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 				// add to result
 				interfaces.put(networkInterface.getName(), networkInterface);
 
-			} catch (IllegalArgumentException | IOException e) {
+			} catch (IllegalArgumentException e) {
 				throw new OpenemsException("Unable to read file [" + file + "]: " + e.getMessage());
 			}
 		}
@@ -128,14 +142,58 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 		return new NetworkConfiguration(interfaces);
 	}
 
+	private NetworkConfiguration readNetworkManagerConfig() throws OpenemsNamedException {
+		var interfaces = new TreeMap<String, NetworkInterface<?>>();
+
+		var files = new ArrayList<File>();
+		files.addAll(this.readNetworkConfigFiles(NETWORK_MANAGER_RUN_PATH));
+		files.addAll(this.readNetworkConfigFiles(NETWORK_MANAGER_BASE_PATH));
+		for (final File file : files) {
+			if (file.isDirectory() || !file.getName().endsWith(".nmconnection")) {
+				continue;
+			}
+			try {
+				var lines = this.handleExecuteSystemReadFile(file.toPath());
+				NetworkInterface<File> networkInterface = parseNetworkManagerConnectionFile(lines, file);
+				if (networkInterface == null) {
+					// unsupported connection type (e.g. wifi, bridge) — skip silently
+					continue;
+				}
+				interfaces.put(networkInterface.getName(), networkInterface);
+			} catch (IllegalArgumentException e) {
+				throw new OpenemsException("Unable to read file [" + file + "]: " + e.getMessage());
+			}
+		}
+		return new NetworkConfiguration(interfaces);
+	}
+
+	private List<File> readNetworkConfigFiles(String path) throws OpenemsException {
+		var filePath = Paths.get(path).toFile();
+		if (!filePath.exists()) {
+			throw new OpenemsException("Base-Path [" + filePath + "] does not exist.");
+		}
+		var files = filePath.listFiles();
+		if (files == null) {
+			return Collections.emptyList();
+		}
+		return Arrays.asList(files);
+	}
+
 	@Override
 	public void handleSetNetworkConfigRequest(User user, NetworkConfiguration oldNetworkConfiguration,
 			SetNetworkConfig.Request request) throws OpenemsNamedException {
+		// apply request onto old configuration (shared between both backends)
 		var isChanged = false;
+		var newInterfacesToCreate = new ArrayList<NetworkInterface<?>>();
+
 		for (NetworkInterface<?> networkInterface : request.networkInterfaces()) {
 			NetworkInterface<?> iface = oldNetworkConfiguration.getInterfaces().get(networkInterface.getName());
+
+			// If interface doesn't exist, mark it as a new interface to create
 			if (iface == null) {
-				throw new OpenemsException("No network interface with name [" + networkInterface.getName() + "]");
+				newInterfacesToCreate.add(networkInterface);
+				isChanged = true;
+				continue;
 			}
 			if (iface.updateFrom(networkInterface)) {
 				isChanged = true;
@@ -148,19 +206,76 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 		}
 
 		// write configuration files
+		switch (this.network) {
+		case NETWORK_MANAGER -> this.writeNetworkManagerConfig(user, oldNetworkConfiguration, newInterfacesToCreate, request);
+		case SYSTEMD_NETWORKD -> this.writeNetworkdConfig(user, oldNetworkConfiguration, newInterfacesToCreate, request);
+		case UNDEFINED -> throw new OpenemsException("Network service undefined");
+		}
+	}
+
+	private void writeNetworkdConfig(User user,
+			NetworkConfiguration oldNetworkConfiguration,
+			List<NetworkInterface<?>> newInterfacesToCreate,
+			SetNetworkConfig.Request request) throws OpenemsNamedException {
+
 		IOException writeException = null;
-		for (Entry<String, NetworkInterface<?>> entry : oldNetworkConfiguration.getInterfaces().entrySet()) {
-			if (!request.networkInterfaces().stream().anyMatch(i -> i.getName().equals(entry.getKey()))) {
-				continue;
-			}
-			NetworkInterface<?> iface = entry.getValue();
-			var file = (File) iface.getAttachment();
-			var lines = this.toFileFormat(user, iface);
+
+		// First create .network files for new interfaces
+		for (NetworkInterface<?> newInterface : newInterfacesToCreate) {
+			var fileName = newInterface.getName() + ".network";
+			var file = new File(NETWORK_BASE_PATH, fileName);
+			var lines = this.toNetworkdFileFormat(user, newInterface);
 			try {
+				// Ensure the directory exists
+				Files.createDirectories(Paths.get(NETWORK_BASE_PATH));
 				Files.write(file.toPath(), lines, StandardCharsets.UTF_8);
+
+				// Add the new interface to oldNetworkConfiguration
+				oldNetworkConfiguration.getInterfaces().put(//
+						newInterface.getName(), //
+						new NetworkInterface<>(//
+								newInterface.getName(), //
+								newInterface.getDhcp(), //
+								newInterface.getLinkLocalAddressing(), //
+								newInterface.getGateway(), //
+								newInterface.getDns(), //
+								newInterface.getAddresses(), //
+								newInterface.getDhcpRouteMetric(), //
+								newInterface.getIpv4Forwarding(), //
+								newInterface.getIpMasquerade(), //
+								newInterface.getDestination(), //
+								newInterface.getGatewayOnLink(), //
+								newInterface.getRoutes(), //
+								file));
+
+				log.info("Created new network interface configuration file: " + fileName);
 			} catch (IOException e) {
+				log.error("Failed to create network interface configuration file: " + fileName, e);
 				writeException = e;
 			}
+		}
+
+		// Update configuration files for existing interfaces
+		for (Entry<String, NetworkInterface<?>> entry : oldNetworkConfiguration.getInterfaces().entrySet()) {
+			if (request.networkInterfaces().stream().noneMatch(i -> i.getName().equals(entry.getKey()))) {
+				continue;
+			}
+
+			// Skip newly created interfaces
+			if (newInterfacesToCreate.stream().anyMatch(ni -> ni.getName().equals(entry.getKey()))) {
+				continue;
+			}
+
+			NetworkInterface<?> iface = entry.getValue();
+			var file = (File) iface.getAttachment();
+			if (file == null) {
+				// Create file if it doesn't exist (fallback for old interfaces)
+				var fileName = iface.getName() + ".network";
+				file = new File(NETWORK_BASE_PATH, fileName);
+				log.warn("Network interface file not found for " + iface.getName() + ", creating new file");
+			}
+			var lines = this.toNetworkdFileFormat(user, iface);
+			this.handleExecuteSystemWriteFile(file.toPath(), lines);
 		}
 
 		// did an exception happen while writing?
@@ -171,7 +286,86 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 
 		// apply the configuration by restarting the systemd-networkd service
 		this.handleExecuteSystemCommandRequest(ExecuteSystemCommandRequest
-				.runInBackgroundWithoutAuthentication("systemctl restart systemd-networkd --no-block"));
+				.withRootPrivileges("systemctl restart systemd-networkd --no-block", true, 0));
+	}
+
+	private void writeNetworkManagerConfig(User user,
+			NetworkConfiguration oldNetworkConfiguration,
+			List<NetworkInterface<?>> newInterfacesToCreate,
+			SetNetworkConfig.Request request) throws OpenemsNamedException {
+
+		// First create .nmconnection files for new interfaces
+		for (NetworkInterface<?> newInterface : newInterfacesToCreate) {
+			var fileName = newInterface.getName() + ".nmconnection";
+			var file = new File(NETWORK_MANAGER_BASE_PATH, fileName);
+			var lines = toNetworkManagerFileFormat(user, newInterface);
+			this.handleExecuteSystemWriteFile(file.toPath(), lines);
+			// NetworkManager refuses to load connections unless permissions are 0600
+			this.handleExecuteSystemCommandRequest(
+					ExecuteSystemCommandRequest.withRootPrivileges("chmod 600 " + file.toPath(), false, 5));
+
+			// Add the new interface to oldNetworkConfiguration
+			oldNetworkConfiguration.getInterfaces().put(//
+					newInterface.getName(), //
+					new NetworkInterface<>(//
+							newInterface.getName(), //
+							newInterface.getDhcp(), //
+							newInterface.getLinkLocalAddressing(), //
+							newInterface.getGateway(), //
+							newInterface.getDns(), //
+							newInterface.getAddresses(), //
+							newInterface.getDhcpRouteMetric(), //
+							newInterface.getIpv4Forwarding(), //
+							newInterface.getIpMasquerade(), //
+							newInterface.getDestination(), //
+							newInterface.getGatewayOnLink(), //
+							newInterface.getRoutes(), //
+							file));
+
+			log.info("Created new network interface configuration file: " + fileName);
+		}
+
+		// Update configuration files for existing interfaces
+		var touchedInterfaces = new ArrayList<String>();
+		for (Entry<String, NetworkInterface<?>> entry : oldNetworkConfiguration.getInterfaces().entrySet()) {
+			if (request.networkInterfaces().stream().noneMatch(i -> i.getName().equals(entry.getKey()))) {
+				continue;
+			}
+
+			// Skip newly created interfaces
+			if (newInterfacesToCreate.stream().anyMatch(ni -> ni.getName().equals(entry.getKey()))) {
+				continue;
+			}
+
+			NetworkInterface<?> iface = entry.getValue();
+			var file = (File) iface.getAttachment();
+			if (file == null) {
+				// Create file if it doesn't exist (fallback for old interfaces)
+				var fileName = iface.getName() + ".nmconnection";
+				file = new File(NETWORK_MANAGER_BASE_PATH, fileName);
+				log.warn("NetworkManager connection file not found for " + iface.getName() + ", creating new file");
+			}
+			var lines = toNetworkManagerFileFormat(user, iface);
+			this.handleExecuteSystemWriteFile(file.toPath(), lines);
+			// NetworkManager refuses to load connections unless permissions are 0600
+			this.handleExecuteSystemCommandRequest(
+					ExecuteSystemCommandRequest.withRootPrivileges("chmod 600 " + file.toPath(), false, 5));
+			touchedInterfaces.add(iface.getName());
+		}
+
+		// Reload connection files so NetworkManager picks up the changes
+		this.handleExecuteSystemCommandRequest(
+				ExecuteSystemCommandRequest.withRootPrivileges("nmcli connection reload", true, 0));
+		// Activate newly created connections
+		for (var newInterface : newInterfacesToCreate) {
+			this.handleExecuteSystemCommandRequest(ExecuteSystemCommandRequest
+					.withRootPrivileges("nmcli connection up " + newInterface.getName(), true, 0));
+		}
+		// Re-apply changed connections on their devices
+		for (var name : touchedInterfaces) {
+			this.handleExecuteSystemCommandRequest(
+					ExecuteSystemCommandRequest.withRootPrivileges("nmcli device reapply " + name, true, 0));
+		}
 	}
 
 	/**
@@ -200,9 +394,7 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 	 */
 	private static void onMatchInet4Address(Pattern pattern, String line,
 			ThrowingConsumer<Inet4Address, OpenemsNamedException> callback) throws OpenemsNamedException {
-		onMatchString(pattern, line, property -> {
-			callback.accept(InetAddressUtils.parseOrError(property));
-		});
+		onMatchString(pattern, line, property -> callback.accept(InetAddressUtils.parseOrError(property)));
 	}
 
 	/**
@@ -211,9 +403,8 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 	 * @param user  the User
 	 * @param iface the input network interface configuration
 	 * @return a list of strings for writing it to a file
-	 * @throws OpenemsNamedException on error
 	 */
-	private List<String> toFileFormat(User user, NetworkInterface<?> iface) throws OpenemsNamedException {
+	private List<String> toNetworkdFileFormat(User user, NetworkInterface<?> iface) {
 		List<String> result = new ArrayList<>();
 		result.add("# changedBy: " //
 				+ user.getName());
@@ -233,6 +424,12 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 		if (iface.getDns().isSetAndNotNull()) {
 			result.add("DNS=" + iface.getDns().getValue().getHostAddress());
 		}
+		if (iface.getGateway().isSetAndNotNull()) {
+			result.add("Gateway=" + iface.getGateway().getValue().getHostAddress());
+		}
+		if (iface.getGatewayOnLink().isSetAndNotNull()) {
+			result.add("GatewayOnLink=" + (iface.getGatewayOnLink().getValue() ? "yes" : "no"));
+		}
 		if (iface.getLinkLocalAddressing().isSetAndNotNull()) {
 			result.add("LinkLocalAddressing=" + (iface.getLinkLocalAddressing().getValue() ? "yes" : "no"));
 		}
@@ -243,25 +440,20 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 			result.add("IPMasquerade=" + iface.getIpMasquerade().getValue().settingValue);
 		}
 
-		var metric = DEFAULT_METRIC;
-		if (iface.getMetric().isSetAndNotNull()) {
-			metric = iface.getMetric().getValue().intValue();
+		var dhcpRouteMetric = DEFAULT_DHCP_ROUTE_METRIC;
+		if (iface.getDhcpRouteMetric().isSetAndNotNull()) {
+			dhcpRouteMetric = iface.getDhcpRouteMetric().getValue();
 		}
 
 		if (iface.getDhcp().isSetAndNotNull()) {
-			var dhcp = iface.getDhcp().getValue();
+			final boolean dhcp = iface.getDhcp().getValue();
 			result.add(EMPTY_SECTION);
 			if (dhcp) { // dhcp == yes
 				result.add(DHCP_SECTION);
-				result.add("RouteMetric=" + metric);
-			} else {
-				result.add(ROUTE_SECTION);
-				if (iface.getGateway().isSetAndNotNull()) {
-					result.add("Gateway=" + iface.getGateway().getValue().getHostAddress());
-				}
-				result.add("Metric=" + metric);
+				result.add("RouteMetric=" + dhcpRouteMetric);
 			}
 		}
+
 		if (iface.getAddresses().isSetAndNotNull()) {
 			for (var address : iface.getAddresses().getValue()) {
 				final var label = address.getLabel();
@@ -273,145 +465,158 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 				}
 			}
 		}
+		if (iface.getRoutes().isSet() && !iface.getRoutes().getValue().isEmpty()) {
+			for (var route : iface.getRoutes().getValue()) {
+				result.add(EMPTY_SECTION);
+				result.add(ROUTE_SECTION);
+				if (route.getRouteGateway() != null) {
+					result.add("Gateway=" + route.getRouteGateway());
+				}
+				if (route.getRouteDestination() != null) {
+					result.add("Destination=" + route.getRouteDestination());
+				}
+				if (route.isRouteGatewayOnLink()) {
+					result.add("GatewayOnLink=yes");
+				}
+				if (route.getRouteMetric() != null) {
+					result.add("Metric=" + route.getRouteMetric());
+				}
+			}
+		}
+
 		return result;
+	}
+
+	/**
+	 * Converts a {@link NetworkInterface} to a NetworkManager keyfile
+	 * (.nmconnection) body.
+	 *
+	 * @param user  the User
+	 * @param iface the network interface configuration
+	 * @return the file contents as a list of lines
+	 */
+	private static List<String> toNetworkManagerFileFormat(User user, NetworkInterface<?> iface) {
+		List<String> result = new ArrayList<>();
+		result.add("# changedBy: " //
+				+ user.getName());
+		result.add("# changedAt: " //
+				+ LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES).toString());
+
+		result.add(CONNECTION_SECTION);
+		result.add("id=" + iface.getName());
+		result.add("type=ethernet");
+		result.add("interface-name=" + iface.getName());
+		result.add(EMPTY_SECTION);
+
+		result.add(IPV4_SECTION);
+		final String method;
+		if (iface.getDhcp().isSetAndNotNull() && iface.getDhcp().getValue()) {
+			method = "auto";
+		} else if (iface.getLinkLocalAddressing().isSetAndNotNull() //
+				&& iface.getLinkLocalAddressing().getValue() //
+				&& (!iface.getAddresses().isSetAndNotNull() || iface.getAddresses().getValue().isEmpty())) {
+			method = "link-local";
+		} else {
+			method = "manual";
+		}
+		result.add("method=" + method);
+		if (!method.equals("auto") && iface.getAddresses().isSetAndNotNull()) {
+			var idx = 1;
+			for (var address : iface.getAddresses().getValue()) {
+				result.add("address" + idx + "=" + address.toString());
+				idx++;
+			}
+		}
+		if (iface.getGateway().isSetAndNotNull()) {
+			result.add("gateway=" + iface.getGateway().getValue().getHostAddress());
+		}
+		if (iface.getDns().isSetAndNotNull()) {
+			result.add("dns=" + iface.getDns().getValue().getHostAddress() + ";");
+		}
+		if (iface.getDhcpRouteMetric().isSetAndNotNull()) {
+			result.add("route-metric=" + iface.getDhcpRouteMetric().getValue());
+		}
+		result.add(EMPTY_SECTION);
+
+		result.add(IPV6_SECTION);
+		result.add("method=auto");
+
+		return result;
+	}
+
+	/**
+	 * Reads a file via a privileged {@code cat} command.
+	 *
+	 * @param target the file path to read
+	 * @return the file lines
+	 * @throws OpenemsNamedException on error
+	 */
+	private List<String> handleExecuteSystemReadFile(Path target) throws OpenemsNamedException {
+		var request = ExecuteSystemCommandRequest
+				.withRootPrivileges("cat " + target.toString().replaceAll(" ", "\\\\ "), false, 5);
+		try {
+			var response = this.handleExecuteSystemCommandRequest(request).get();
+			return response.scr.stdout();
+		} catch (InterruptedException | ExecutionException e) {
+			throw new OpenemsException("Unable to read file [" + target + "]: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * Writes lines to a file via a privileged {@code cp} from a temp file.
+	 *
+	 * @param target the destination file path
+	 * @param lines  the content to write
+	 * @throws OpenemsNamedException on error
+	 */
+	private void handleExecuteSystemWriteFile(Path target, List<String> lines) throws OpenemsNamedException {
+		try {
+			var tmp = Files.createTempFile("openems-", ".tmp");
+			try {
+				Files.write(tmp, lines, StandardCharsets.UTF_8);
+				var request = ExecuteSystemCommandRequest
+						.withRootPrivileges("cp " + tmp + " " + target.toString().replaceAll(" ", "\\\\ "), false, 5);
+				this.handleExecuteSystemCommandRequest(request).get();
+			} finally {
+				Files.deleteIfExists(tmp);
+			}
+		} catch (IOException | InterruptedException | ExecutionException e) {
+			throw new OpenemsException("Unable to write file [" + target + "]: " + e.getMessage());
+		}
 	}
 
 	@Override
 	public CompletableFuture<ExecuteSystemCommandResponse> handleExecuteSystemCommandRequest(
 			ExecuteSystemCommandRequest request) {
-		var result = new CompletableFuture<ExecuteSystemCommandResponse>();
-		this.execute(request.systemCommand, //
-				scr -> result.complete(new ExecuteSystemCommandResponse(request.id, scr)),
-				e -> result.completeExceptionally(e));
-		return result;
+		return execute(request.systemCommand).thenApply(cmd -> { //
+			final var scr = new SystemCommandResponse(cmd.stdout(), cmd.stderr(), cmd.exitCode());
+			return new ExecuteSystemCommandResponse(request.id, scr);
+		});
 	}
 
 	@Override
 	public CompletableFuture<ExecuteSystemRestartResponse> handleExecuteSystemRestartRequest(
 			ExecuteSystemRestartRequest request) {
-		final var result = new CompletableFuture<ExecuteSystemRestartResponse>();
 		var sc = new SystemCommand(//
 				switch (request.type) { // actual command string
 				case HARD -> "/usr/bin/systemctl reboot -i"; // "-i" is for "ignore inhibitors and users"
 				case SOFT -> "/usr/bin/systemctl restart openems";
 				}, //
 				false, // runInBackground
-				5, // timeoutSeconds
-				Optional.empty(), // username
-				Optional.empty()); // password
-		this.execute(sc, //
-				scr -> result.complete(new ExecuteSystemRestartResponse(request.id, scr)),
-				e -> result.completeExceptionally(e));
-		return result;
+				true, // requireRootPrivileges
+				5); // timeoutSeconds
+		return execute(sc).thenApply(cmd -> { //
+			final var scr = new SystemCommandResponse(cmd.stdout(), cmd.stderr(), cmd.exitCode());
+			return new ExecuteSystemRestartResponse(request.id, scr);
+		});
 	}
 
-	private void execute(SystemCommand sc, Consumer<SystemCommandResponse> scr, Consumer<Throwable> error) {
-		try {
-			final Process proc;
-			if (sc.username().isPresent() && sc.password().isPresent()) {
-				// Authenticate with user and password
-				proc = getRuntime().exec(new String[] { //
-						"/bin/bash", "-c", "--", //
-						"echo " + sc.password().get() + " | " //
-								+ " /usr/bin/sudo -Sk -p '' -u \"" + sc.username().get() + "\" -- " //
-								+ sc.command() });
-			} else if (sc.password().isPresent()) {
-				// Authenticate with password (user must have 'sudo' permissions)
-				proc = getRuntime().exec(new String[] { //
-						"/bin/bash", "-c", "--", //
-						"echo " + sc.password().get() + " | " //
-								+ " /usr/bin/sudo -Sk -p '' -- " //
-								+ sc.command() });
-			} else {
-				// No authentication: run as current user
-				proc = getRuntime().exec(new String[] { //
-						"/bin/bash", "-c", "--", sc.command() });
-			}
-
-			// get stdout and stderr
-			var stdoutFuture = supplyAsync(new InputStreamToString(this.parent, sc.command(), proc.getInputStream()));
-			var stderrFuture = supplyAsync(new InputStreamToString(this.parent, sc.command(), proc.getErrorStream()));
-
-			if (sc.runInBackground()) {
-				/*
-				 * run in background
-				 */
-				var stdout = new String[] { //
-						"Command [" + sc.command() + "] executed in background...", //
-						"Check system logs for more information." };
-				scr.accept(new SystemCommandResponse(stdout, new String[0], 0));
-
-			} else {
-				/*
-				 * run in foreground with timeout
-				 */
-				runAsync(() -> {
-					var stderr = new ArrayList<>();
-					try {
-						// apply command timeout
-						if (!proc.waitFor(sc.timeoutSeconds(), TimeUnit.SECONDS)) {
-							stderr.add("Command [" + sc.command() + "] timed out.");
-							proc.destroy();
-						}
-
-						var stdout = stdoutFuture.get(1, TimeUnit.SECONDS);
-						stderr.addAll(stderrFuture.get(1, TimeUnit.SECONDS));
-						scr.accept(new SystemCommandResponse(//
-								stdout.toArray(new String[stdout.size()]), //
-								stderr.toArray(new String[stderr.size()]), //
-								proc.exitValue() //
-						));
-
-					} catch (Throwable e) {
-						error.accept(e);
-					}
-				});
-			}
-		} catch (IOException e) {
-			error.accept(e);
-		}
-	}
-
-	/**
-	 * Asynchronously converts a InputStream to a String.
-	 */
-	private static class InputStreamToString implements Supplier<List<String>> {
-		private final Logger log = LoggerFactory.getLogger(InputStreamToString.class);
-
-		private final HostImpl parent;
-		private final String command;
-		private final InputStream stream;
-
-		public InputStreamToString(HostImpl parent, String command, InputStream stream) {
-			this.parent = parent;
-			this.command = StringUtils.toShortString(command, 20);
-			this.stream = stream;
-		}
-
-		@Override
-		public List<String> get() {
-			List<String> result = new ArrayList<>();
-			BufferedReader reader = null;
-			String line = null;
-			try {
-				reader = new BufferedReader(new InputStreamReader(this.stream));
-				while ((line = reader.readLine()) != null) {
-					result.add(line);
-					this.parent.logInfo(this.log, "[" + this.command + "] " + line);
-				}
-			} catch (Throwable e) {
-				result.add(e.getClass().getSimpleName() + ": " + line);
-			} finally {
-				if (reader != null) {
-					try {
-						reader.close();
-					} catch (IOException e) {
-						/* ignore */
-					}
-				}
-			}
-			return result;
-		}
+	private static CompletableFuture<Command> execute(SystemCommand sc) {
+		return new Bash(sc.command()) //
+				.withTimeout(sc.timeoutSeconds()) //
+				.withSudo(sc.username().orElse(null), sc.password().orElse(null), sc.requireRootPrivileges()) //
+				.runInBackground(sc.runInBackground()) //
+				.execute();
 	}
 
 	@Override
@@ -445,10 +650,22 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 			.compile("^IPv4Forwarding=(\\w+)$");
 	private static final Pattern NETWORK_IP_MASQUERADE = Pattern //
 			.compile("^IPMasquerade=(\\w+)$");
-	private static final Pattern GATEWAY_METRIC = Pattern //
-			.compile("^Metric=([0-9]+)$");
+	private static final Pattern NETWORK_MANAGER_SECTION = Pattern //
+			.compile("^\\[([a-zA-Z0-9_-]+)\\]$");
+	private static final Pattern NETWORK_MANAGER_ADDRESS_N = Pattern //
+			.compile("^address\\d+$");
 	private static final Pattern ROUTE_METRIC = Pattern //
+			.compile("^Metric=([0-9]+)$");
+	private static final Pattern DHCP_METRIC = Pattern //
 			.compile("^RouteMetric=([0-9]+)$");
+	private static final Pattern NETWORK_DESTINATION = Pattern //
+			.compile("^Destination=(" + NetworkConfiguration.PATTERN_INET4ADDRESS + "/\\d+)$");
+	private static final Pattern NETWORK_GATEWAY_ON_LINK = Pattern.compile("^GatewayOnLink=(yes|no)$");
+	private static final Pattern ROUTE_GATEWAY = Pattern //
+			.compile("^Gateway=(" + NetworkConfiguration.PATTERN_INET4ADDRESS + ")$");
+	private static final Pattern ROUTE_DESTINATION = Pattern //
+			.compile("^Destination=(" + NetworkConfiguration.PATTERN_INET4ADDRESS + "/\\d+)$");
+	private static final Pattern ROUTE_GATEWAY_ON_LINK = Pattern.compile("^GatewayOnLink=(yes|no)$");
 
 	/**
 	 * Parses a Systemd-Networkd configuration file.
@@ -467,7 +684,7 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 	 */
 	protected static <A> NetworkInterface<A> parseSystemdNetworkdConfigurationFile(List<String> lines, A attachment)
 			throws OpenemsNamedException {
-		var currentBlock = Block.UNDEFINED;
+		var currentBlock = NetworkdBlock.UNDEFINED;
 		final var name = new AtomicReference<String>();
 		final var dhcp = new AtomicReference<ConfigurationProperty<Boolean>>(//
 				ConfigurationProperty.asNotSet());
@@ -475,7 +692,7 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 				ConfigurationProperty.asNotSet());
 		final var gateway = new AtomicReference<ConfigurationProperty<Inet4Address>>(//
 				ConfigurationProperty.asNotSet());
-		final var metric = new AtomicReference<ConfigurationProperty<Integer>>(//
+		final var dhcpRouteMetric = new AtomicReference<ConfigurationProperty<Integer>>(//
 				ConfigurationProperty.asNotSet());
 		final var dns = new AtomicReference<ConfigurationProperty<Inet4Address>>(//
 				ConfigurationProperty.asNotSet());
@@ -485,6 +702,22 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 				ConfigurationProperty.asNotSet());
 		final var ipMasquerade = new AtomicReference<ConfigurationProperty<IpMasqueradeSetting>>(//
 				ConfigurationProperty.asNotSet());
+		final var destination = new AtomicReference<ConfigurationProperty<Set<Inet4AddressWithSubnetmask>>>(//
+				ConfigurationProperty.asNotSet());
+		final var gatewayOnLink = new AtomicReference<ConfigurationProperty<Boolean>>(//
+				ConfigurationProperty.asNotSet());
+		final var routes = new AtomicReference<ConfigurationProperty<Set<Routes>>>(//
+				ConfigurationProperty.asNotSet());
+		final var routeGateway = new AtomicReference<ConfigurationProperty<Inet4Address>>(//
+				ConfigurationProperty.asNotSet());
+		final var routeDestination = new AtomicReference<ConfigurationProperty<Set<Inet4AddressWithSubnetmask>>>(//
+				ConfigurationProperty.asNotSet());
+		final var routeGatewayOnLink = new AtomicReference<ConfigurationProperty<Boolean>>(//
+				ConfigurationProperty.asNotSet());
+		final var routeMetric = new AtomicReference<ConfigurationProperty<Integer>>(//
+				ConfigurationProperty.asNotSet());
+
+		final var allRoutes = new ArrayList<Routes>();
 
 		// holds the latest found address
 		final var tmpAddress = new AtomicReference<Inet4AddressWithSubnetmask>();
@@ -494,26 +727,34 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 			if (line.isBlank()) {
 				continue;
 			}
-
 			/*
 			 * Find current configuration block
 			 */
 			if (line.startsWith("[")) {
+				var previousBlock = currentBlock;
+				if (previousBlock == NetworkdBlock.ROUTE) {
+					addCurrentRouteToList(routeGateway, routeDestination, routeGatewayOnLink, routeMetric, allRoutes);
+				}
 				currentBlock = switch (line) {
 				case MATCH_SECTION //
-					-> Block.MATCH;
+					-> NetworkdBlock.MATCH;
 				case NETWORK_SECTION //
-					-> Block.NETWORK;
+					-> NetworkdBlock.NETWORK;
 				case ADDRESS_SECTION -> {
 					tmpAddress.set(null);
-					yield Block.ADDRESS;
+					yield NetworkdBlock.ADDRESS;
 				}
-				case ROUTE_SECTION //
-					-> Block.ROUTE;
+				case ROUTE_SECTION -> {
+					routeGateway.set(ConfigurationProperty.asNotSet());
+					routeDestination.set(ConfigurationProperty.asNotSet());
+					routeGatewayOnLink.set(ConfigurationProperty.asNotSet());
+					routeMetric.set(ConfigurationProperty.asNotSet());
+					yield NetworkdBlock.ROUTE;
+				}
 				case DHCP_SECTION //
-					-> Block.DHCP;
+					-> NetworkdBlock.DHCP;
 				default //
-					-> Block.UNDEFINED;
+					-> NetworkdBlock.UNDEFINED;
 				};
 				continue;
 			}
@@ -522,17 +763,13 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 			 * Parse Block
 			 */
 			switch (currentBlock) {
-			case MATCH -> {
-				onMatchString(MATCH_NAME, line, property -> {
-					name.set(property);
-				});
-			}
+			case MATCH -> onMatchString(MATCH_NAME, line, name::set);
 			case NETWORK -> {
 				onMatchString(NETWORK_DHCP, line, property -> {
-					dhcp.set(ConfigurationProperty.of(property.toLowerCase().equals("yes")));
+					dhcp.set(ConfigurationProperty.of(property.equalsIgnoreCase("yes")));
 				});
 				onMatchString(NETWORK_LINK_LOCAL_ADDRESSING, line, property -> {
-					linkLocalAddressing.set(ConfigurationProperty.of(property.toLowerCase().equals("yes")));
+					linkLocalAddressing.set(ConfigurationProperty.of(property.equalsIgnoreCase("yes")));
 				});
 				onMatchInet4Address(NETWORK_GATEWAY, line, property -> {
 					gateway.set(ConfigurationProperty.of(property));
@@ -549,11 +786,23 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 					addresses.set(ConfigurationProperty.of(addressDetails));
 				});
 				onMatchString(NETWORK_IPV4_FORWARDING, line, property -> {
-					ipv4Forwarding.set(ConfigurationProperty.of(property.toLowerCase().equals("yes")));
+					ipv4Forwarding.set(ConfigurationProperty.of(property.equalsIgnoreCase("yes")));
 				});
 				onMatchString(NETWORK_IP_MASQUERADE, line, property -> {
 					ipMasquerade.set(ConfigurationProperty.of(IpMasqueradeSetting.findBySettingValue(property)));
 				});
+				onMatchString(NETWORK_DESTINATION, line, property -> {
+					var destinations = destination.get().getValue();
+					if (destinations == null) {
+						destinations = new HashSet<>();
+					}
+					destinations.add(Inet4AddressWithSubnetmask.fromString("", property));
+					destination.set(ConfigurationProperty.of(destinations));
+				});
+				onMatchString(NETWORK_GATEWAY_ON_LINK, line, property -> {
+					gatewayOnLink.set(ConfigurationProperty.of(property.equalsIgnoreCase("yes")));
+				});
+
 			}
 			case ADDRESS -> {
 				onMatchString(NETWORK_ADDRESS, line, property -> {
@@ -586,24 +835,252 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 				});
 			}
 			case ROUTE -> {
-				onMatchInet4Address(NETWORK_GATEWAY, line, property -> {
-					gateway.set(ConfigurationProperty.of(property));
+				onMatchInet4Address(ROUTE_GATEWAY, line, property -> {
+					routeGateway.set(ConfigurationProperty.of(property));
 				});
-				onMatchString(GATEWAY_METRIC, line, property -> {
-					metric.set(ConfigurationProperty.of(Integer.parseInt(property)));
+				onMatchString(ROUTE_DESTINATION, line, property -> {
+					routeDestination
+							.set(ConfigurationProperty.of(Set.of(Inet4AddressWithSubnetmask.fromString("", property))));
+				});
+				onMatchString(ROUTE_GATEWAY_ON_LINK, line, property -> {
+					routeGatewayOnLink.set(ConfigurationProperty.of(property.equalsIgnoreCase("yes")));
+				});
+				onMatchString(ROUTE_METRIC, line, property -> {
+					routeMetric.set(ConfigurationProperty.of(Integer.parseInt(property)));
 				});
 			}
 			case DHCP -> {
-				onMatchString(ROUTE_METRIC, line, property -> {
-					metric.set(ConfigurationProperty.of(Integer.parseInt(property)));
+				onMatchString(DHCP_METRIC, line, property -> {
+					dhcpRouteMetric.set(ConfigurationProperty.of(Integer.parseInt(property)));
 				});
 			}
 			case UNDEFINED -> doNothing();
 			}
 		}
+		if (currentBlock == NetworkdBlock.ROUTE) {
+			addCurrentRouteToList(routeGateway, routeDestination, routeGatewayOnLink, routeMetric, allRoutes);
+		}
+		if (!allRoutes.isEmpty()) {
+			routes.set(ConfigurationProperty.of(new HashSet<>(allRoutes)));
+		} else {
+			routes.set(ConfigurationProperty.asNotSet());
+		}
+
 		return new NetworkInterface<>(name.get(), //
-				dhcp.get(), linkLocalAddressing.get(), gateway.get(), dns.get(), addresses.get(), metric.get(),
-				ipv4Forwarding.get(), ipMasquerade.get(), attachment);
+				dhcp.get(), //
+				linkLocalAddressing.get(), //
+				gateway.get(), //
+				dns.get(), //
+				addresses.get(), //
+				dhcpRouteMetric.get(), //
+				ipv4Forwarding.get(), //
+				ipMasquerade.get(), //
+				destination.get(), //
+				gatewayOnLink.get(), //
+				routes.get(), //
+				attachment);
+
+	}
+
+	private static void addCurrentRouteToList(//
+			AtomicReference<ConfigurationProperty<Inet4Address>> routeGateway, //
+			AtomicReference<ConfigurationProperty<Set<Inet4AddressWithSubnetmask>>> routeDestination, //
+			AtomicReference<ConfigurationProperty<Boolean>> routeGatewayOnLink, //
+			AtomicReference<ConfigurationProperty<Integer>> routeMetric, //
+			List<Routes> allRoutes//
+	) {
+		var gatewayString = routeGateway.get().isSetAndNotNull() ? routeGateway.get().getValue().getHostAddress()
+				: null;
+		var destinationString = routeDestination.get().isSetAndNotNull()
+				? routeDestination.get().getValue().iterator().next().toString()
+				: null;
+		var gatewayOnLinkValue = routeGatewayOnLink.get().isSetAndNotNull() ? routeGatewayOnLink.get().getValue()
+				: false;
+		var metricValue = routeMetric.get().isSetAndNotNull() ? routeMetric.get().getValue() : null;
+		var hasRouteData = gatewayString != null || destinationString != null || gatewayOnLinkValue
+				|| metricValue != null;
+		if (hasRouteData) {
+			var routeBuilder = Routes.builder();
+
+			if (gatewayString != null) {
+				routeBuilder.setRouteGateway(gatewayString);
+			}
+
+			if (destinationString != null) {
+				routeBuilder.setRouteDestination(destinationString);
+			}
+
+			routeBuilder.setRouteGatewayOnLink(gatewayOnLinkValue);
+
+			if (metricValue != null) {
+				routeBuilder.setRouteMetric(metricValue);
+			}
+
+			try {
+				var builtRoute = routeBuilder.build();
+				allRoutes.add(builtRoute);
+			} catch (Exception e) {
+				log.warn("Skipping invalid route due to: " + e);
+			}
+		}
+	}
+
+	/**
+	 * Parses a NetworkManager keyfile (.nmconnection).
+	 *
+	 * <p>
+	 * Only {@code type=ethernet} connections are returned; all others yield
+	 * {@code null}.
+	 *
+	 * @param <A>        the type of the attachment
+	 * @param lines      the lines to parse
+	 * @param attachment to be added as an attachment to the
+	 *                   {@link NetworkInterface}
+	 * @return a {@link NetworkInterface}, or {@code null} for non-ethernet
+	 *         connections
+	 * @throws OpenemsNamedException on error
+	 */
+	protected static <A> NetworkInterface<A> parseNetworkManagerConnectionFile(List<String> lines, A attachment)
+			throws OpenemsNamedException {
+		var currentBlock = NetworkManagerBlock.UNDEFINED;
+		String id = null;
+		String interfaceName = null;
+		String connectionType = null;
+
+		final var dhcp = new AtomicReference<ConfigurationProperty<Boolean>>(//
+				ConfigurationProperty.asNotSet());
+		final var linkLocalAddressing = new AtomicReference<ConfigurationProperty<Boolean>>(//
+				ConfigurationProperty.asNotSet());
+		final var gateway = new AtomicReference<ConfigurationProperty<Inet4Address>>(//
+				ConfigurationProperty.asNotSet());
+		final var dns = new AtomicReference<ConfigurationProperty<Inet4Address>>(//
+				ConfigurationProperty.asNotSet());
+		final var dhcpRouteMetric = new AtomicReference<ConfigurationProperty<Integer>>(//
+				ConfigurationProperty.asNotSet());
+		final var addresses = new AtomicReference<ConfigurationProperty<Set<Inet4AddressWithSubnetmask>>>(//
+				ConfigurationProperty.asNotSet());
+
+		for (var raw : lines) {
+			var line = raw.trim();
+			if (line.isEmpty() || line.startsWith("#") || line.startsWith(";")) {
+				continue;
+			}
+			var sectionMatcher = NETWORK_MANAGER_SECTION.matcher(line);
+			if (sectionMatcher.matches()) {
+				currentBlock = switch (sectionMatcher.group(1).toLowerCase()) {
+				case "connection" -> NetworkManagerBlock.CONNECTION;
+				case "ipv4" -> NetworkManagerBlock.IPV4;
+				default -> NetworkManagerBlock.UNDEFINED;
+				};
+				continue;
+			}
+			var eq = line.indexOf('=');
+			if (eq < 0) {
+				continue;
+			}
+			var key = line.substring(0, eq).trim().toLowerCase();
+			var value = line.substring(eq + 1).trim();
+
+			switch (currentBlock) {
+			case CONNECTION -> {
+				switch (key) {
+				case "id" -> id = value;
+				case "interface-name" -> interfaceName = value;
+				case "type" -> connectionType = value.toLowerCase();
+				default -> doNothing();
+				}
+			}
+			case IPV4 -> {
+				if (NETWORK_MANAGER_ADDRESS_N.matcher(key).matches()) {
+					// format: <ip>/<prefix>[,<gateway>]
+					var parts = value.split(",");
+					if (parts.length >= 1 && !parts[0].isBlank()) {
+						var addressDetails = addresses.get().getValue();
+						if (addressDetails == null) {
+							addressDetails = new HashSet<>();
+						}
+						addressDetails.add(Inet4AddressWithSubnetmask.fromString("", parts[0].trim()));
+						addresses.set(ConfigurationProperty.of(addressDetails));
+					}
+					if (parts.length >= 2 && !parts[1].isBlank() && !gateway.get().isSet()) {
+						var parsed = InetAddressUtils.parseOrNull(parts[1].trim());
+						if (parsed != null) {
+							gateway.set(ConfigurationProperty.of(parsed));
+						}
+					}
+				} else {
+					switch (key) {
+					case "method" -> {
+						switch (value.toLowerCase()) {
+						case "auto" -> {
+							dhcp.set(ConfigurationProperty.of(true));
+							linkLocalAddressing.set(ConfigurationProperty.of(true));
+						}
+						case "manual" -> dhcp.set(ConfigurationProperty.of(false));
+						case "link-local" -> {
+							dhcp.set(ConfigurationProperty.of(false));
+							linkLocalAddressing.set(ConfigurationProperty.of(true));
+						}
+						case "disabled" -> {
+							dhcp.set(ConfigurationProperty.of(false));
+							linkLocalAddressing.set(ConfigurationProperty.of(false));
+						}
+						default -> doNothing();
+						}
+					}
+					case "gateway" -> {
+						var parsed = InetAddressUtils.parseOrNull(value);
+						if (parsed != null) {
+							gateway.set(ConfigurationProperty.of(parsed));
+						}
+					}
+					case "dns" -> {
+						// semicolon-separated; take first entry
+						var first = value.split(";", 2)[0].trim();
+						if (!first.isEmpty()) {
+							var parsed = InetAddressUtils.parseOrNull(first);
+							if (parsed != null) {
+								dns.set(ConfigurationProperty.of(parsed));
+							}
+						}
+					}
+					case "route-metric" -> {
+						try {
+							dhcpRouteMetric.set(ConfigurationProperty.of(Integer.parseInt(value)));
+						} catch (NumberFormatException e) {
+							/* ignore malformed metric */
+						}
+					}
+					default -> doNothing();
+					}
+				}
+			}
+			case UNDEFINED -> doNothing();
+			}
+		}
+
+		if (connectionType != null && !connectionType.equals("ethernet")) {
+			return null;
+		}
+
+		final var name = interfaceName != null ? interfaceName : id;
+		if (name == null) {
+			throw new OpenemsException("NetworkManager connection file has neither interface-name nor id");
+		}
+
+		return new NetworkInterface<>(name, //
+				dhcp.get(), //
+				linkLocalAddressing.get(), //
+				gateway.get(), //
+				dns.get(), //
+				addresses.get(), //
+				dhcpRouteMetric.get(), //
+				ConfigurationProperty.asNotSet(), // ipv4Forwarding — not represented in NM keyfile
+				ConfigurationProperty.asNotSet(), // ipMasquerade — not represented in NM keyfile
+				ConfigurationProperty.asNotSet(), // destination — not represented in NM keyfile
+				ConfigurationProperty.asNotSet(), // gatewayOnLink — not represented in NM keyfile
+				ConfigurationProperty.asNotSet(), // routes — not represented in NM keyfile
+				attachment);
 	}
 
 	@Override
@@ -615,7 +1092,10 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 					.flatMap(t -> t.ips().stream() //
 							.map(d -> d.ip().getInet4Address())) //
 					.toList();
-		} catch (InterruptedException | ExecutionException e) {
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return Collections.emptyList();
+		} catch (ExecutionException e) {
 			return Collections.emptyList();
 		}
 
@@ -629,10 +1109,47 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 			var resultIpShow = this.handleExecuteSystemCommandRequest(reqIpShow).get().getResult().toString();
 			var resultIpRoute = this.handleExecuteSystemCommandRequest(reqIpRoute).get().getResult().toString();
 			return new GetNetworkInfo.Response(parseShowJson(resultIpShow), parseRouteJson(resultIpRoute));
-		} catch (InterruptedException | ExecutionException e) {
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return new GetNetworkInfo.Response(Collections.emptyList(), Collections.emptyList());
+		} catch (ExecutionException e) {
 			return new GetNetworkInfo.Response(Collections.emptyList(), Collections.emptyList());
 		}
 
+	}
+
+	/**
+	 * Detects the active network service by querying systemd.
+	 *
+	 * <p>
+	 * systemd-networkd is checked first and used as default; NetworkManager is the
+	 * fallback.
+	 *
+	 * @return the detected {@link NetworkService}
+	 */
+	private static NetworkService detectNetwork() {
+		if (isNetworkServiceActive("systemd-networkd")) {
+			return NetworkService.SYSTEMD_NETWORKD;
+		}
+		if (isNetworkServiceActive("NetworkManager")) {
+			return NetworkService.NETWORK_MANAGER;
+		}
+		return NetworkService.SYSTEMD_NETWORKD;
+	}
+
+	private static boolean isNetworkServiceActive(String unit) {
+		try {
+			var proc = new ProcessBuilder("systemctl", "is-active", "--quiet", unit) //
+					.redirectErrorStream(true) //
+					.start();
+			if (!proc.waitFor(2, TimeUnit.SECONDS)) {
+				proc.destroyForcibly();
+				return false;
+			}
+			return proc.exitValue() == 0;
+		} catch (IOException | InterruptedException e) {
+			return false;
+		}
 	}
 
 	protected static List<JsonObject> parseIpJson(String json) throws OpenemsNamedException {
@@ -666,7 +1183,7 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 
 	/**
 	 * Parses the json returned by ip address get command.
-	 * 
+	 *
 	 * @param resultIpShow the json to be parsed
 	 * @return a list of parsed ips
 	 * @throws OpenemsNamedException on error
@@ -679,16 +1196,12 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 
 		return networkInterfaces.stream() //
 				.map(SystemdInterface.serializer()::deserialize) //
-				.map(t -> {
-					return new NetworkInfoWrapper(t.ifname(), t.addressInfos.stream() //
-							.map(address -> {
-								return new NetworkInfoAddress(//
-										new Inet4AddressWithSubnetmask(address.label(), parseOrNull(address.local()),
-												address.prefixlen),
-										address.dynamic);
-							}) //
-							.toList());
-				}) //
+				.map(t -> new NetworkInfoWrapper(t.ifname(), t.addressInfos.stream() //
+						.map(address -> new NetworkInfoAddress(//
+								new Inet4AddressWithSubnetmask(address.label(), parseOrNull(address.local()),
+										address.prefixlen),
+								address.dynamic)) //
+						.toList())) //
 				.toList();
 	}
 
@@ -700,18 +1213,16 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 		 * @return the created {@link JsonSerializer}
 		 */
 		public static JsonSerializer<SystemdInterface> serializer() {
-			return jsonObjectSerializer(SystemdInterface.class, json -> {
-				return new SystemdInterface(//
-						json.getString("ifname"), //
-						json.getList("addr_info", SystemdAddressInfo.serializer()) //
-				);
-			}, obj -> {
-				return JsonUtils.buildJsonObject() //
-						.addProperty("ifname", obj.ifname()) //
-						.add("addr_info", SystemdAddressInfo.serializer().toListSerializer() //
-								.serialize(obj.addressInfos())) //
-						.build();
-			});
+			return jsonObjectSerializer(SystemdInterface.class, //
+					json -> new SystemdInterface(//
+							json.getString("ifname"), //
+							json.getList("addr_info", SystemdAddressInfo.serializer())),
+					obj -> JsonUtils.buildJsonObject() //
+							.addProperty("ifname", obj.ifname()) //
+							.add("addr_info", SystemdAddressInfo.serializer().toListSerializer() //
+									.serialize(obj.addressInfos())) //
+							.build() //
+			);
 		}
 
 	}
@@ -724,24 +1235,21 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 		 * @return the created {@link JsonSerializer}
 		 */
 		public static JsonSerializer<SystemdAddressInfo> serializer() {
-			return jsonObjectSerializer(SystemdAddressInfo.class, json -> {
-				return new SystemdAddressInfo(//
-						json.getString("family"), //
-						json.getString("local"), //
-						json.getInt("prefixlen"), //
-						json.getStringOrNull("label"), //
-						json.getOptionalBoolean("dynamic").orElse(false) //
-				);
-			}, obj -> {
-				return JsonUtils.buildJsonObject() //
-						.addProperty("family", obj.family()) //
-						.addProperty("local", obj.local()) //
-						.addProperty("prefixlen", obj.prefixlen()) //
-						.addProperty("label", obj.label()) //
-						.onlyIf(obj.dynamic(), b -> b//
-								.addProperty("dynamic", obj.dynamic()))
-						.build();
-			});
+			return jsonObjectSerializer(SystemdAddressInfo.class, //
+					json -> new SystemdAddressInfo(//
+							json.getString("family"), //
+							json.getString("local"), //
+							json.getInt("prefixlen"), //
+							json.getStringOrNull("label"), //
+							json.getOptionalBoolean("dynamic").orElse(false)), //
+					obj -> JsonUtils.buildJsonObject() //
+							.addProperty("family", obj.family()) //
+							.addProperty("local", obj.local()) //
+							.addProperty("prefixlen", obj.prefixlen()) //
+							.addProperty("label", obj.label()) //
+							.onlyIf(obj.dynamic(), b -> b//
+									.addProperty("dynamic", obj.dynamic()))
+							.build());
 		}
 
 	}
@@ -751,13 +1259,10 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 		final var sc = new SystemCommand(//
 				"cat /etc/os-release", //
 				false, // runInBackground
-				5, // timeoutSeconds
-				Optional.empty(), // username
-				Optional.empty()); // password
+				5); // timeoutSeconds
 
-		final var versionFuture = new CompletableFuture<String>();
-		this.execute(sc, success -> {
-			final var osVersionName = Stream.of(success.stdout()) //
+		return execute(sc).thenApply(success -> {
+			final var osVersionName = success.stdout().stream() //
 					.map(t -> t.split("=", 2)) //
 					.filter(t -> t.length == 2) //
 					.filter(t -> t[0].equals("PRETTY_NAME")) //
@@ -770,15 +1275,85 @@ public class OperatingSystemDebianSystemd implements OperatingSystem {
 					}) //
 					.findAny();
 
-			osVersionName.ifPresentOrElse(versionFuture::complete, () -> versionFuture
-					.completeExceptionally(new OpenemsException("OS-Version name not found in /etc/os-release")));
-		}, versionFuture::completeExceptionally);
-		return versionFuture;
+			return osVersionName.orElseThrow(() -> new CompletionException(
+					new OpenemsException("OS-Version name not found in /etc/os-release")));
+		});
 	}
 
 	@Override
 	public Updateable getSystemUpdateable() {
 		return null;
+	}
+
+	@Override
+	public void deleteNetworkInterfaces(User user, List<String> interfaceNames) throws OpenemsNamedException {
+		switch (this.network) {
+		case NETWORK_MANAGER -> this.deleteNetworkManagerInterfaces(interfaceNames);
+		case SYSTEMD_NETWORKD -> this.deleteNetworkdInterfaces(interfaceNames);
+		case UNDEFINED -> throw new OpenemsException("Network service undefined");
+		}
+	}
+
+	private void deleteNetworkdInterfaces(List<String> interfaceNames) throws OpenemsNamedException {
+		var errors = new ArrayList<String>();
+
+		for (var interfaceName : interfaceNames) {
+			var fileName = interfaceName + ".network";
+			var file = new File(NETWORK_BASE_PATH, fileName);
+
+			if (file.exists()) {
+				try {
+					Files.delete(file.toPath());
+					log.info("Deleted network interface configuration file: " + fileName);
+				} catch (IOException e) {
+					log.error("Failed to delete network interface configuration file: " + fileName, e);
+					errors.add("Failed to delete interface " + interfaceName + ": " + e.getMessage());
+				}
+			} else {
+				log.warn("Network interface configuration file not found: " + fileName);
+			}
+		}
+
+		if (!errors.isEmpty()) {
+			throw new OpenemsException("Errors while deleting interfaces: " + String.join(", ", errors));
+		}
+
+		// Restart systemd-networkd to apply changes
+		this.handleExecuteSystemCommandRequest(ExecuteSystemCommandRequest
+				.runInBackgroundWithoutAuthentication("systemctl restart systemd-networkd --no-block"));
+	}
+
+	private void deleteNetworkManagerInterfaces(List<String> interfaceNames) throws OpenemsNamedException {
+		var errors = new ArrayList<String>();
+
+		for (var interfaceName : interfaceNames) {
+			// 'nmcli connection delete' removes the connection and its keyfile. The
+			// connection id equals the interface name for connections managed by OpenEMS.
+			var request = ExecuteSystemCommandRequest
+					.withRootPrivileges("nmcli connection delete " + interfaceName, false, 5);
+			try {
+				var response = this.handleExecuteSystemCommandRequest(request).get();
+				if (response.scr.exitcode() == 0) {
+					log.info("Deleted NetworkManager connection: " + interfaceName);
+				} else {
+					// non-zero exit (e.g. unknown connection) is treated as a warning, in line
+					// with the "file not found" handling of the systemd-networkd backend
+					log.warn("NetworkManager connection not deleted [" + interfaceName + "]: "
+							+ String.join(" ", response.scr.stderr()));
+				}
+			} catch (InterruptedException | ExecutionException e) {
+				log.error("Failed to delete NetworkManager connection: " + interfaceName, e);
+				errors.add("Failed to delete interface " + interfaceName + ": " + e.getMessage());
+			}
+		}
+
+		if (!errors.isEmpty()) {
+			throw new OpenemsException("Errors while deleting interfaces: " + String.join(", ", errors));
+		}
+
+		// reload connection files to apply the removal
+		this.handleExecuteSystemCommandRequest(
+				ExecuteSystemCommandRequest.withRootPrivileges("nmcli connection reload", true, 0));
 	}
 
 }

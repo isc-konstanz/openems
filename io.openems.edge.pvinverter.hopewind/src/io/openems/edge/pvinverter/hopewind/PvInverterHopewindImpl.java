@@ -48,12 +48,13 @@ import io.openems.edge.bridge.modbus.api.element.SignedWordElement;
 import io.openems.edge.bridge.modbus.api.element.UnsignedWordElement;
 import io.openems.edge.bridge.modbus.api.task.FC3ReadRegistersTask;
 import io.openems.edge.bridge.modbus.api.task.FC6WriteRegisterTask;
+import io.openems.edge.bridge.modbus.api.task.Task;
+import io.openems.edge.common.component.ComponentManager;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.event.EdgeEventConstants;
 import io.openems.edge.common.modbusslave.ModbusSlave;
 import io.openems.edge.common.modbusslave.ModbusSlaveTable;
 import io.openems.edge.common.startstop.StartStop;
-import io.openems.edge.common.startstop.StartStopConfig;
 import io.openems.edge.common.startstop.StartStoppable;
 import io.openems.edge.common.taskmanager.Priority;
 import io.openems.edge.common.type.TypeUtils;
@@ -77,6 +78,7 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 		})
 @EventTopics({
 		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE,
+		EdgeEventConstants.TOPIC_CYCLE_BEFORE_WRITE,
 })
 public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent implements PvInverterHopewind, ManagedSymmetricPvInverter,
 		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
@@ -93,10 +95,30 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 	@Reference
 	private ConfigurationAdmin cm;
 
+	@Reference
+	private ComponentManager componentManager;
+
 	@Reference(policy = DYNAMIC, policyOption = GREEDY, cardinality = OPTIONAL)
 	private volatile Timedata timedata = null;
 
-	private volatile Instant watchdog = Instant.MIN;
+	/**
+	 * Timestamp of the last externally received ACTIVE_POWER_LIMIT setpoint.
+	 * Initialized at activation, so the watchdog is armed even if no setpoint ever
+	 * arrives.
+	 */
+	private volatile Instant lastSetpoint = Instant.MIN;
+
+	/** Failsafe stage 1: force the power limit to 0, re-asserted every cycle. */
+	private volatile boolean failsafeActive = false;
+
+	/** Failsafe stage 2: command the inverter to shut down entirely. */
+	private volatile boolean failsafeShutdownActive = false;
+
+	/** Guards the failsafe's own writes from re-arming the watchdog. */
+	private volatile boolean selfWrite = false;
+
+	/** Consecutive heartbeat write failures; accessed from the Modbus thread. */
+	private int heartbeatFailures = 0;
 
 	@Override
 	@Reference(policy = STATIC, policyOption = GREEDY, cardinality = MANDATORY)
@@ -134,14 +156,32 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		ElectricityMeter.calculateAverageVoltageFromPhases(this);
 		ElectricityMeter.calculateSumCurrentFromPhases(this);
 		PvInverterHopewind.calculatePhasePowersFromVoltageAndCurrent(this);
-		
-		if (config.watchdog()) {
-			this.getActivePowerLimitChannel().onSetNextValue(value -> {
-				if (value.isDefined()) {
-					watchdog = Instant.now();
-				}
-			});
+
+		// Arm the watchdog at activation, so that "main edge died before the first
+		// setpoint" is covered as well. Every external ACTIVE_POWER_LIMIT write
+		// re-arms it and releases an active failsafe.
+		this.lastSetpoint = Instant.now(this.componentManager.getClock());
+		this.getActivePowerLimitChannel().onSetNextWrite(this::onActivePowerLimitWrite);
+	}
+
+	/**
+	 * Called on every write to the ACTIVE_POWER_LIMIT channel: external setpoints
+	 * re-arm the watchdog and release an active failsafe; the failsafe's own writes
+	 * are ignored via {@link #selfWrite}.
+	 *
+	 * @param value the written value in [W]
+	 * @throws OpenemsNamedException on error
+	 */
+	private void onActivePowerLimitWrite(Integer value) throws OpenemsNamedException {
+		if (this.selfWrite || value == null) {
+			return;
 		}
+		this.lastSetpoint = Instant.now(this.componentManager.getClock());
+		if (this.failsafeActive) {
+			this.logInfo(this.log, "Fresh power limit setpoint [" + value + " W] received. Releasing failsafe.");
+		}
+		this.failsafeActive = false;
+		this.failsafeShutdownActive = false;
 	}
 
 	@Override
@@ -157,12 +197,55 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		}
 		switch (event.getTopic()) {
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
+			this.sendHeartbeat();
 			this.handleStateMachine();
-			this.handleWatchdog();
 			this.handleInverterMode();
 
 			this.calculateProductionEnergy.update(this.getActivePower().get());
 			break;
+		case EdgeEventConstants.TOPIC_CYCLE_BEFORE_WRITE:
+			// Must run AFTER all controllers and the PV-Inverter Cluster (which
+			// writes at AFTER_CONTROLLERS) and BEFORE the Modbus write: a null
+			// setpoint from the cluster clears the pending register value, so a
+			// failsafe 0 written earlier in the cycle would never reach the device.
+			this.handleWatchdog();
+			break;
+		}
+	}
+
+	/**
+	 * Writes the heartbeat register every cycle, unconditionally.
+	 *
+	 * <p>
+	 * Per field observation the register only drives the communication LED on the
+	 * inverter - the device takes no protective action when writes stop. It is
+	 * therefore kept as a pure keepalive/diagnostic and is NOT part of the
+	 * failsafe concept; see {@link #handleWatchdog()} for the actual protection.
+	 */
+	private void sendHeartbeat() {
+		try {
+			this.setHeartBeat();
+		} catch (IllegalArgumentException | OpenemsNamedException e) {
+			this.logError(this.log, "Setting HeartBeat failed: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * Tracks the result of every heartbeat Modbus write; raises
+	 * {@link PvInverterHopewind.ChannelId#HEART_BEAT_FAILED} after
+	 * {@link PvInverterHopewind#HEART_BEAT_FAILURE_THRESHOLD} consecutive
+	 * failures. Called on the Modbus worker thread.
+	 *
+	 * @param state the {@link Task.ExecuteState} of the write
+	 */
+	private void onHeartbeatExecuted(Task.ExecuteState state) {
+		if (state instanceof Task.ExecuteState.Error) {
+			if (++this.heartbeatFailures >= HEART_BEAT_FAILURE_THRESHOLD) {
+				this._setHeartBeatFailed(true);
+			}
+		} else if (state instanceof Task.ExecuteState.Ok) {
+			this.heartbeatFailures = 0;
+			this._setHeartBeatFailed(false);
 		}
 	}
 
@@ -173,19 +256,8 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		// Initialize 'Start-Stop' Channel
 		this._setStartStop(StartStop.UNDEFINED);
 
-		if (this.startStopTarget.get() != StartStop.STOP && 
-				this.config.startStop() != StartStopConfig.STOP) {
-			try {
-				this.setHeartBeat();
-
-			} catch (IllegalArgumentException | OpenemsNamedException e) {
-				this.logError(this.log, "Setting HeartBeat failed: " + e.getMessage());
-				e.printStackTrace();
-			}
-		}
-
 		// Prepare the Context
-		var context = new Context(this, this.config);
+		var context = new Context(this, this.config, this.componentManager.getClock());
 
 		// Call the StateMachine
 		try {
@@ -197,44 +269,104 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		}
 	}
 
+	/**
+	 * Watchdog failsafe: the inverter has no communication supervision of its own,
+	 * so protection must be an active command from this driver.
+	 *
+	 * <p>
+	 * Stage 1: after {@link Config#watchdogTimer()} seconds without an external
+	 * ACTIVE_POWER_LIMIT setpoint, the power limit is forced to 0 - re-asserted on
+	 * every cycle until a fresh setpoint arrives (latched failsafe).
+	 *
+	 * <p>
+	 * Stage 2: after {@link Config#watchdogShutdownTimer()} additional seconds the
+	 * inverter is commanded to shut down entirely via the state machine (see
+	 * {@link #getStartStopTarget()}).
+	 *
+	 * <p>
+	 * Note: values re-applied by an Api-Controller ({@code ApiWorker}) are
+	 * indistinguishable from fresh setpoints, so the effective reaction time after
+	 * a dead control path is {@code apiTimeout + watchdogTimer}. Configure the
+	 * Api-Controller's {@code apiTimeout} non-zero and small.
+	 *
+	 * <p>
+	 * Runs on TOPIC_CYCLE_BEFORE_WRITE. Writers upstream (PV-Inverter Cluster,
+	 * controllers) run earlier in the cycle; the cluster writes {@code null} when it
+	 * has no setpoint, which clears the pending Modbus value. Asserting the failsafe
+	 * 0 here guarantees it is the last write before EXECUTE_WRITE (field test
+	 * 2026-09-07: a stage-1 trip did not curtail because of this ordering).
+	 */
 	private void handleWatchdog() {
-		if (this.config.watchdog() && 
-				!this.watchdog.equals(Instant.MIN) && 
-				this.config.watchdogTimer() < Duration.between(this.watchdog, Instant.now()).getSeconds()) {
-			this.logWarn(this.log, 
-					"WatchDog triggered after " + Duration.between(this.watchdog, Instant.now()).getSeconds() + 
-					" seconds. Power limit will be set to 0");
-			try {
-				if (this.config.activePowerLimitMode() == ActivePowerLimitMode.ACTUAL) {
-					this.setActivePowerLimit(0);
-				}
-				else {
-					// TODO: Implement power to percent calculation
-					throw new UnsupportedOperationException("Setting percent power limit not yet supported.");
-				}
-				this.watchdog = Instant.MIN;
+		if (!this.config.watchdog()) {
+			this._setWatchdogTripped(false);
+			this._setWatchdogShutdown(false);
+			return;
+		}
 
-			} catch (OpenemsNamedException e) {
-				this.logError(this.log, "Updating power limit failed: " + e.getMessage());
-				e.printStackTrace();
+		final var now = Instant.now(this.componentManager.getClock());
+
+		// An intentional STOP (config or channel) means no setpoints are expected:
+		// keep the watchdog idle. Not applied while the failsafe itself forces STOP.
+		if (!this.failsafeShutdownActive && this.getStartStopTarget() == StartStop.STOP) {
+			this.lastSetpoint = now;
+		}
+
+		final var sinceSetpoint = Duration.between(this.lastSetpoint, now).getSeconds();
+
+		if (!this.failsafeActive && sinceSetpoint > this.config.watchdogTimer()) {
+			this.failsafeActive = true;
+			this.logWarn(this.log, "Watchdog tripped after " + sinceSetpoint
+					+ " s without a power limit setpoint. Forcing power limit to 0.");
+		}
+
+		if (this.failsafeActive) {
+			var shutdownTimer = this.config.watchdogShutdownTimer();
+			if (!this.failsafeShutdownActive && shutdownTimer > 0
+					&& sinceSetpoint > this.config.watchdogTimer() + shutdownTimer) {
+				this.failsafeShutdownActive = true;
+				this.logWarn(this.log, "Watchdog escalation after " + sinceSetpoint
+						+ " s without a power limit setpoint. Commanding inverter shutdown.");
 			}
+			this.applyZeroPowerLimit();
+		}
+
+		this._setWatchdogTripped(this.failsafeActive);
+		this._setWatchdogShutdown(this.failsafeShutdownActive);
+	}
+
+	/**
+	 * Forces the power limit to 0 via the actual power register (40012). The
+	 * device is held in ACTUAL mode by {@link #handleInverterMode()}, so this is
+	 * the register it evaluates.
+	 */
+	private void applyZeroPowerLimit() {
+		this.selfWrite = true;
+		try {
+			this.setActivePowerLimit(0);
+		} catch (Exception e) {
+			this.logError(this.log, "Applying failsafe zero power limit failed: " + e.getMessage());
+		} finally {
+			this.selfWrite = false;
 		}
 	}
 
+	/**
+	 * Keeps the device in {@link ActivePowerLimitMode#ACTUAL} (register 40011 = 1),
+	 * the only mode this driver supports: limits are written in kW to 40012. Any
+	 * other read-back value (including "disabled", which lets the inverter export
+	 * uncurtailed - field incident 2026-09) is corrected on the next cycle.
+	 */
 	private void handleInverterMode() {
-		if (!this.getActivePowerLimitMode().isDefined()) {
+		var current = this.getActivePowerLimitMode();
+		if (!current.isDefined() || current.asEnum() == ActivePowerLimitMode.ACTUAL) {
 			return;
 		}
-		ActivePowerLimitMode activePowerLimitModeConfig = this.config.activePowerLimitMode();
-		ActivePowerLimitMode activePowerLimitMode = this.getActivePowerLimitMode().asEnum();
-		if (activePowerLimitMode != activePowerLimitModeConfig) {
-			try {
-				this.setActivePowerLimitMode(activePowerLimitModeConfig);
-
-			} catch (OpenemsNamedException e) {
-			this.logError(this.log, 
-				"Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
-			}
+		this.logWarn(this.log, "Inverter reports active power limit mode [" + current.asEnum().getName()
+				+ "]. Forcing ACTUAL (register 40011 = 1).");
+		try {
+			this.setActivePowerLimitMode(ActivePowerLimitMode.ACTUAL);
+		} catch (OpenemsNamedException e) {
+			this.logError(this.log, "Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
 		}
 	}
 
@@ -248,6 +380,10 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 
 	@Override
 	public StartStop getStartStopTarget() {
+		if (this.failsafeShutdownActive) {
+			// Watchdog stage 2: force STOP until fresh setpoints arrive
+			return StartStop.STOP;
+		}
 		return switch (this.config.startStop()) {
 		case AUTO -> this.startStopTarget.get(); // read StartStop-Channel
 		case START -> StartStop.START; // force START
@@ -755,9 +891,17 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 //						m(PvInverterHopewind.ChannelId.RSD_ENABLED,
 //								new UnsignedWordElement(31120))),
 
-				new FC6WriteRegisterTask(32014,
+				new FC6WriteRegisterTask(this::onHeartbeatExecuted, 32014,
 						m(PvInverterHopewind.ChannelId.HEART_BEAT,
 								new UnsignedWordElement(32014))),
+
+				new FC3ReadRegistersTask(40011, Priority.HIGH,
+						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_MODE,
+								new UnsignedWordElement(40011)),
+						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
+								new UnsignedWordElement(40012), SCALE_FACTOR_1),
+						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
+								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
 
 //				new FC16WriteRegistersTask(34074,
 //						m(PvInverterHopewind.ChannelId.DRM_ENABLED,
@@ -790,9 +934,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 				new FC6WriteRegisterTask(40012,
 						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
 								new UnsignedWordElement(40012), SCALE_FACTOR_1)),
-				new FC6WriteRegisterTask(40013,
-						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
-								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
+//				new FC6WriteRegisterTask(40013,
+//						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
+//								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
 
 				new FC6WriteRegisterTask(40200,
 						m(PvInverterHopewind.ChannelId.STARTUP,

@@ -37,7 +37,17 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 	public static final int REACTIVE_POWER_MAX = (int) Math.round(APPARENT_POWER_MAX * Math.sin(Math.acos(0.8)));
 
 	public static final int WATCH_DOG_TIMER_DEFAULT = 60;
+	public static final int WATCH_DOG_SHUTDOWN_TIMER_DEFAULT = 300;
+	/**
+	 * Value written to the heartbeat register 32014 ("Communication enable") every
+	 * cycle. Per field observation this register only drives the communication LED
+	 * on the inverter; the device takes NO protective action when writes stop.
+	 * Export protection must therefore always be an active command (power limit 0
+	 * or shutdown) - see the watchdog failsafe in the implementation.
+	 */
 	public static final int HEART_BEAT_DEFAULT = 0;
+	/** Consecutive heartbeat write failures before HEART_BEAT_FAILED is raised. */
+	public static final int HEART_BEAT_FAILURE_THRESHOLD = 3;
 
 	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
 
@@ -49,6 +59,16 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 				.text("The maximum number of start attempts failed")),
 		MAX_STOP_ATTEMPTS(Doc.of(Level.WARNING)
 				.text("The maximum number of stop attempts failed")),
+
+		WATCHDOG_TRIPPED(Doc.of(Level.WARNING)
+				.persistencePriority(PersistencePriority.HIGH)
+				.text("Watchdog tripped: no power limit setpoint received - power limit is forced to 0")),
+		WATCHDOG_SHUTDOWN(Doc.of(Level.WARNING)
+				.persistencePriority(PersistencePriority.HIGH)
+				.text("Watchdog escalated: inverter is commanded to shut down until setpoints return")),
+		HEART_BEAT_FAILED(Doc.of(Level.WARNING)
+				.persistencePriority(PersistencePriority.HIGH)
+				.text("Writing the heartbeat register failed repeatedly - Modbus link to the inverter is unhealthy")),
 
 		HEART_BEAT(Doc.of(OpenemsType.INTEGER)
 				.accessMode(AccessMode.WRITE_ONLY)
@@ -106,8 +126,9 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 				.accessMode(AccessMode.READ_WRITE)
 				.text("Active Power Limit Mode")
 				.persistencePriority(PersistencePriority.MEDIUM)),
+		/** Read-back of register 40013. Not written by this driver (percent mode on hold). */
 		ACTIVE_POWER_LIMIT_PERCENT(Doc.of(OpenemsType.INTEGER)
-				.accessMode(AccessMode.READ_WRITE)
+				.accessMode(AccessMode.READ_ONLY)
 				.unit(Unit.PERCENT)
 				.persistencePriority(PersistencePriority.MEDIUM)),
 
@@ -593,6 +614,39 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 	 */
 	public default void setHeartBeat() throws OpenemsNamedException {
 		this.setHeartBeat(HEART_BEAT_DEFAULT);
+	}
+
+	/**
+	 * Internal method to set the 'nextValue' on {@link ChannelId#WATCHDOG_TRIPPED}
+	 * Channel.
+	 *
+	 * @param value the next value
+	 */
+	public default void _setWatchdogTripped(boolean value) {
+		StateChannel channel = this.channel(ChannelId.WATCHDOG_TRIPPED);
+		channel.setNextValue(value);
+	}
+
+	/**
+	 * Internal method to set the 'nextValue' on {@link ChannelId#WATCHDOG_SHUTDOWN}
+	 * Channel.
+	 *
+	 * @param value the next value
+	 */
+	public default void _setWatchdogShutdown(boolean value) {
+		StateChannel channel = this.channel(ChannelId.WATCHDOG_SHUTDOWN);
+		channel.setNextValue(value);
+	}
+
+	/**
+	 * Internal method to set the 'nextValue' on {@link ChannelId#HEART_BEAT_FAILED}
+	 * Channel.
+	 *
+	 * @param value the next value
+	 */
+	public default void _setHeartBeatFailed(boolean value) {
+		StateChannel channel = this.channel(ChannelId.HEART_BEAT_FAILED);
+		channel.setNextValue(value);
 	}
 
 	public static void calculatePhasePowersFromVoltageAndCurrent(PvInverterHopewind meter) {

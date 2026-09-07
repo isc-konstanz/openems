@@ -18,9 +18,12 @@ Key registers:
 | 32014 | W | "Communication enable" / heartbeat. *Drives only the communication
 LED on the inverter.* The device takes NO protective action when writes stop -
 there is no built-in communication supervision.
-| 40011 | R/W | Active power regulation mode: `0` = actual power [kW] (register
-40012), `1` = proportional power [%] (register 40013). Mind: this mapping is the
-source of truth for `ActivePowerLimitMode`.
+| 40011 | R/W | Active power regulation mode. No vendor documentation exists.
+`1` = actual power [kW] via 40012: *confirmed* (all bus sniffs, vendor master
+runs this mode). `0`: *confirmed NOT kW* - the inverter accepts it and then
+ignores 40012 (field incident 2026-09, uncurtailed export); disabled vs. percent
+not yet distinguished. `2` = proportional [%] via 40013: *unverified*, never
+observed. `ActivePowerLimitMode` must follow this mapping.
 | 40012 | R/W | Active power limit, 0.01 kW units (6600 = 66 kW).
 | 40013 | R/W | Active power limit, 0.01 % units (10000 = 100 %).
 | 40200 / 40201 / 40202 | W | Startup / Shutdown / Reset (write `1`).
@@ -36,11 +39,18 @@ write:
 * *Heartbeat* (register 32014) is written every cycle as a pure
   keepalive/diagnostic. `HEART_BEAT_FAILED` (WARNING) is raised after repeated
   Modbus write failures.
+* *Mode enforcement*: the driver supports only ACTUAL mode (register 40011 = 1,
+  kW limits via 40012). If the inverter reports any other mode it is forced back
+  to 1 on the next cycle with a WARN log. Percent mode (40013) is on hold and
+  not written by the driver; the channel `ActivePowerLimitPercent` is read-only.
 * *Watchdog stage 1*: if no external `ACTIVE_POWER_LIMIT` setpoint arrives for
   `watchdogTimer` seconds (default 60), the driver latches a failsafe that
-  forces the power limit to 0 *on every cycle* - both the kW and the percent
-  register are written, so the limit is effective regardless of the device's
-  regulation mode. `WATCHDOG_TRIPPED` (WARNING) is raised. A fresh external
+  forces the power limit to 0 *on every cycle* via the kW register 40012.
+  The write happens on `TOPIC_CYCLE_BEFORE_WRITE`, i.e. after every controller
+  and after the PV-Inverter Cluster: the cluster writes `null` to its inverters
+  when it has no setpoint, which clears the pending Modbus value - a failsafe 0
+  written earlier in the cycle would never reach the device (field test
+  2026-09-07). `WATCHDOG_TRIPPED` (WARNING) is raised. A fresh external
   setpoint releases the failsafe.
 * *Watchdog stage 2*: after `watchdogShutdownTimer` additional seconds (default
   300, 0 = disabled) the inverter is commanded to shut down entirely via the

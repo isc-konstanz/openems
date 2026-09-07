@@ -15,7 +15,6 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 		private int watchdogTimer = PvInverterHopewind.WATCH_DOG_TIMER_DEFAULT;
 		private int watchdogShutdownTimer = PvInverterHopewind.WATCH_DOG_SHUTDOWN_TIMER_DEFAULT;
 		private StartStopConfig startStop = StartStopConfig.START;
-		private ActivePowerLimitMode activePowerLimitMode = ActivePowerLimitMode.ACTUAL;
 
 		private Builder() {
 		}
@@ -52,11 +51,6 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 
 		public Builder setStartStop(StartStopConfig startStop) {
 			this.startStop = startStop;
-			return this;
-		}
-
-		public Builder setActivePowerLimitMode(ActivePowerLimitMode activePowerLimitMode) {
-			this.activePowerLimitMode = activePowerLimitMode;
 			return this;
 		}
 
@@ -99,11 +93,6 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 	@Override
 	public StartStopConfig startStop() {
 		return this.builder.startStop;
-	}
-
-	@Override
-	public ActivePowerLimitMode activePowerLimitMode() {
-		return this.builder.activePowerLimitMode;
 	}
 
 	@Override

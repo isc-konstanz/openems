@@ -126,8 +126,9 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 				.accessMode(AccessMode.READ_WRITE)
 				.text("Active Power Limit Mode")
 				.persistencePriority(PersistencePriority.MEDIUM)),
+		/** Read-back of register 40013. Not written by this driver (percent mode on hold). */
 		ACTIVE_POWER_LIMIT_PERCENT(Doc.of(OpenemsType.INTEGER)
-				.accessMode(AccessMode.READ_WRITE)
+				.accessMode(AccessMode.READ_ONLY)
 				.unit(Unit.PERCENT)
 				.persistencePriority(PersistencePriority.MEDIUM)),
 
@@ -613,18 +614,6 @@ public interface PvInverterHopewind extends ManagedSymmetricPvInverter,
 	 */
 	public default void setHeartBeat() throws OpenemsNamedException {
 		this.setHeartBeat(HEART_BEAT_DEFAULT);
-	}
-
-	/**
-	 * Sets the Active Power Limit in [%] of the rated power. See
-	 * {@link ChannelId#ACTIVE_POWER_LIMIT_PERCENT}.
-	 *
-	 * @param value the percent value (0..100)
-	 * @throws OpenemsNamedException on error
-	 */
-	public default void setActivePowerLimitPercent(Integer value) throws OpenemsNamedException {
-		IntegerWriteChannel channel = this.channel(ChannelId.ACTIVE_POWER_LIMIT_PERCENT);
-		channel.setNextWriteValue(value);
 	}
 
 	/**

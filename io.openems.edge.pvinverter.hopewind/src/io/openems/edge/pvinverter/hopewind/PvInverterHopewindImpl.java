@@ -78,6 +78,7 @@ import io.openems.edge.timedata.api.utils.CalculateEnergyFromPower;
 		})
 @EventTopics({
 		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE,
+		EdgeEventConstants.TOPIC_CYCLE_BEFORE_WRITE,
 })
 public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent implements PvInverterHopewind, ManagedSymmetricPvInverter,
 		ElectricityMeter, OpenemsComponent, ModbusComponent, ModbusSlave, TimedataProvider, EventHandler, StartStoppable {
@@ -166,9 +167,7 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 	/**
 	 * Called on every write to the ACTIVE_POWER_LIMIT channel: external setpoints
 	 * re-arm the watchdog and release an active failsafe; the failsafe's own writes
-	 * are ignored via {@link #selfWrite}. In PROPORTIONAL mode the setpoint [W] is
-	 * additionally forwarded as percent of the maximum active power, because the
-	 * device then only evaluates the percent register.
+	 * are ignored via {@link #selfWrite}.
 	 *
 	 * @param value the written value in [W]
 	 * @throws OpenemsNamedException on error
@@ -183,14 +182,6 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		}
 		this.failsafeActive = false;
 		this.failsafeShutdownActive = false;
-
-		if (this.config.activePowerLimitMode() == ActivePowerLimitMode.PROPORTIONAL) {
-			this.setActivePowerLimitPercent(convertWattToPercent(value));
-		}
-	}
-
-	protected static int convertWattToPercent(int watt) {
-		return Math.max(0, Math.min(100, (int) Math.round(watt * 100.0 / ACTIVE_POWER_MAX)));
 	}
 
 	@Override
@@ -208,10 +199,16 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		case EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE:
 			this.sendHeartbeat();
 			this.handleStateMachine();
-			this.handleWatchdog();
 			this.handleInverterMode();
 
 			this.calculateProductionEnergy.update(this.getActivePower().get());
+			break;
+		case EdgeEventConstants.TOPIC_CYCLE_BEFORE_WRITE:
+			// Must run AFTER all controllers and the PV-Inverter Cluster (which
+			// writes at AFTER_CONTROLLERS) and BEFORE the Modbus write: a null
+			// setpoint from the cluster clears the pending register value, so a
+			// failsafe 0 written earlier in the cycle would never reach the device.
+			this.handleWatchdog();
 			break;
 		}
 	}
@@ -291,6 +288,13 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 	 * indistinguishable from fresh setpoints, so the effective reaction time after
 	 * a dead control path is {@code apiTimeout + watchdogTimer}. Configure the
 	 * Api-Controller's {@code apiTimeout} non-zero and small.
+	 *
+	 * <p>
+	 * Runs on TOPIC_CYCLE_BEFORE_WRITE. Writers upstream (PV-Inverter Cluster,
+	 * controllers) run earlier in the cycle; the cluster writes {@code null} when it
+	 * has no setpoint, which clears the pending Modbus value. Asserting the failsafe
+	 * 0 here guarantees it is the last write before EXECUTE_WRITE (field test
+	 * 2026-09-07: a stage-1 trip did not curtail because of this ordering).
 	 */
 	private void handleWatchdog() {
 		if (!this.config.watchdog()) {
@@ -331,15 +335,14 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 	}
 
 	/**
-	 * Forces the power limit to 0. Writes both the actual [W] and the percent [%]
-	 * register, so the limit is effective regardless of the mode the device is
-	 * actually in.
+	 * Forces the power limit to 0 via the actual power register (40012). The
+	 * device is held in ACTUAL mode by {@link #handleInverterMode()}, so this is
+	 * the register it evaluates.
 	 */
 	private void applyZeroPowerLimit() {
 		this.selfWrite = true;
 		try {
 			this.setActivePowerLimit(0);
-			this.setActivePowerLimitPercent(0);
 		} catch (Exception e) {
 			this.logError(this.log, "Applying failsafe zero power limit failed: " + e.getMessage());
 		} finally {
@@ -347,20 +350,23 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 		}
 	}
 
+	/**
+	 * Keeps the device in {@link ActivePowerLimitMode#ACTUAL} (register 40011 = 1),
+	 * the only mode this driver supports: limits are written in kW to 40012. Any
+	 * other read-back value (including "disabled", which lets the inverter export
+	 * uncurtailed - field incident 2026-09) is corrected on the next cycle.
+	 */
 	private void handleInverterMode() {
-		if (!this.getActivePowerLimitMode().isDefined()) {
+		var current = this.getActivePowerLimitMode();
+		if (!current.isDefined() || current.asEnum() == ActivePowerLimitMode.ACTUAL) {
 			return;
 		}
-		ActivePowerLimitMode activePowerLimitModeConfig = this.config.activePowerLimitMode();
-		ActivePowerLimitMode activePowerLimitMode = this.getActivePowerLimitMode().asEnum();
-		if (activePowerLimitMode != activePowerLimitModeConfig) {
-			try {
-				this.setActivePowerLimitMode(activePowerLimitModeConfig);
-
-			} catch (OpenemsNamedException e) {
-			this.logError(this.log, 
-				"Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
-			}
+		this.logWarn(this.log, "Inverter reports active power limit mode [" + current.asEnum().getName()
+				+ "]. Forcing ACTUAL (register 40011 = 1).");
+		try {
+			this.setActivePowerLimitMode(ActivePowerLimitMode.ACTUAL);
+		} catch (OpenemsNamedException e) {
+			this.logError(this.log, "Setting ACTIVE_POWER_LIMIT_MODE failed: " + e.getMessage());
 		}
 	}
 
@@ -928,9 +934,9 @@ public class PvInverterHopewindImpl extends AbstractOpenemsModbusComponent imple
 				new FC6WriteRegisterTask(40012,
 						m(ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT,
 								new UnsignedWordElement(40012), SCALE_FACTOR_1)),
-				new FC6WriteRegisterTask(40013,
-						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
-								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
+//				new FC6WriteRegisterTask(40013,
+//						m(PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT,
+//								new UnsignedWordElement(40013), SCALE_FACTOR_MINUS_2)),
 
 				new FC6WriteRegisterTask(40200,
 						m(PvInverterHopewind.ChannelId.STARTUP,

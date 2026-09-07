@@ -1,7 +1,7 @@
 package io.openems.edge.pvinverter.hopewind;
 
 import static io.openems.edge.pvinverter.api.ManagedSymmetricPvInverter.ChannelId.ACTIVE_POWER_LIMIT;
-import static io.openems.edge.pvinverter.hopewind.PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_PERCENT;
+import static io.openems.edge.pvinverter.hopewind.PvInverterHopewind.ChannelId.ACTIVE_POWER_LIMIT_MODE;
 import static io.openems.edge.pvinverter.hopewind.PvInverterHopewind.ChannelId.HEART_BEAT;
 import static io.openems.edge.pvinverter.hopewind.PvInverterHopewind.ChannelId.INVERTER_STATE;
 import static io.openems.edge.pvinverter.hopewind.PvInverterHopewind.ChannelId.SHUTDOWN;
@@ -44,21 +44,15 @@ public class PvInverterHopewindImplTest {
 	}
 
 	/**
-	 * F11: the mode enum must match the reverse-engineered register map of 40011:
-	 * [0 = power, 1 = percent].
+	 * Register 40011 mapping as confirmed on the device: 0 = disabled, 1 = actual
+	 * power [kW], 2 = proportional power [%]. Writing 0 disables the limit entirely
+	 * (field incident 2026-09) - this test guards against inverting the mapping.
 	 */
 	@Test
 	public void testActivePowerLimitModeMatchesRegisterMap() {
-		assertEquals(0, ActivePowerLimitMode.ACTUAL.getValue());
-		assertEquals(1, ActivePowerLimitMode.PROPORTIONAL.getValue());
-	}
-
-	@Test
-	public void testConvertWattToPercent() {
-		assertEquals(0, PvInverterHopewindImpl.convertWattToPercent(0));
-		assertEquals(50, PvInverterHopewindImpl.convertWattToPercent(33000));
-		assertEquals(100, PvInverterHopewindImpl.convertWattToPercent(66000));
-		assertEquals(100, PvInverterHopewindImpl.convertWattToPercent(99000)); // clamped
+		assertEquals(0, ActivePowerLimitMode.DISABLED.getValue());
+		assertEquals(1, ActivePowerLimitMode.ACTUAL.getValue());
+		assertEquals(2, ActivePowerLimitMode.PROPORTIONAL.getValue());
 	}
 
 	/**
@@ -92,13 +86,11 @@ public class PvInverterHopewindImplTest {
 				.next(new TestCase() //
 						.timeleap(clock, 61, ChronoUnit.SECONDS) //
 						.output(WATCHDOG_TRIPPED, true) //
-						.output(ACTIVE_POWER_LIMIT, 0) //
-						.output(ACTIVE_POWER_LIMIT_PERCENT, 0)) //
+						.output(ACTIVE_POWER_LIMIT, 0)) //
 				// latched: re-asserted on the next cycle as well
 				.next(new TestCase() //
 						.output(WATCHDOG_TRIPPED, true) //
-						.output(ACTIVE_POWER_LIMIT, 0) //
-						.output(ACTIVE_POWER_LIMIT_PERCENT, 0)) //
+						.output(ACTIVE_POWER_LIMIT, 0)) //
 		;
 	}
 
@@ -132,27 +124,6 @@ public class PvInverterHopewindImplTest {
 						.input(ACTIVE_POWER_LIMIT, 20_000) //
 						.output(WATCHDOG_TRIPPED, false) //
 						.output(ACTIVE_POWER_LIMIT, 20_000)) //
-		;
-	}
-
-	/**
-	 * F5: in PROPORTIONAL mode the setpoint is forwarded as percent and the
-	 * failsafe writes percent 0 - no exception may escape.
-	 */
-	@Test
-	public void testProportionalMode() throws Exception {
-		final var clock = new TimeLeapClock(Instant.parse("2026-01-01T12:00:00.00Z"), ZoneOffset.UTC);
-		prepare(clock, myConfig() //
-				.setActivePowerLimitMode(ActivePowerLimitMode.PROPORTIONAL) //
-				.build()) //
-				.next(new TestCase() //
-						.input(ACTIVE_POWER_LIMIT, 33_000) //
-						.output(ACTIVE_POWER_LIMIT_PERCENT, 50)) //
-				.next(new TestCase() //
-						.timeleap(clock, 61, ChronoUnit.SECONDS) //
-						.output(WATCHDOG_TRIPPED, true) //
-						.output(ACTIVE_POWER_LIMIT, 0) //
-						.output(ACTIVE_POWER_LIMIT_PERCENT, 0)) //
 		;
 	}
 
@@ -230,6 +201,57 @@ public class PvInverterHopewindImplTest {
 	 * Watchdog disabled by config: no trip, ever - documents that F2 (default off)
 	 * would have left the incident unprotected.
 	 */
+	/**
+	 * Regression for the 2026-09-07 field test: the PV-Inverter Cluster writes
+	 * {@code null} to every inverter at AFTER_CONTROLLERS when it has no setpoint.
+	 * That clears the pending Modbus value, so a failsafe 0 asserted earlier in the
+	 * cycle never reached the device. The failsafe must be the last write of the
+	 * cycle.
+	 */
+	@Test
+	public void testFailsafeSurvivesClusterNullWrite() throws Exception {
+		final var clock = new TimeLeapClock(Instant.parse("2026-01-01T12:00:00.00Z"), ZoneOffset.UTC);
+		var test = prepare(clock, myConfig().build());
+		var sut = (PvInverterHopewindImpl) test.getSut();
+		test //
+				.next(new TestCase() //
+						.timeleap(clock, 61, ChronoUnit.SECONDS) //
+						.onAfterControllersCallbacks(() -> sut.setActivePowerLimit(null)) //
+						.output(WATCHDOG_TRIPPED, true) //
+						.output(ACTIVE_POWER_LIMIT, 0)) //
+				.next(new TestCase() //
+						.onAfterControllersCallbacks(() -> sut.setActivePowerLimit(null)) //
+						.output(WATCHDOG_TRIPPED, true) //
+						.output(ACTIVE_POWER_LIMIT, 0)) //
+				// a fresh setpoint from the cluster in the same cycle wins and releases
+				.next(new TestCase() //
+						.onAfterControllersCallbacks(() -> sut.setActivePowerLimit(20_000)) //
+						.output(WATCHDOG_TRIPPED, false) //
+						.output(ACTIVE_POWER_LIMIT, 20_000)) //
+		;
+	}
+
+	/**
+	 * Regression for the 2026-09 export incident: if the inverter reports any mode
+	 * other than ACTUAL (here DISABLED = 0, which ignores the kW limit), the driver
+	 * forces register 40011 back to ACTUAL (1). In ACTUAL mode nothing is written.
+	 */
+	@Test
+	public void testModeIsForcedToActual() throws Exception {
+		final var clock = new TimeLeapClock(Instant.parse("2026-01-01T12:00:00.00Z"), ZoneOffset.UTC);
+		prepare(clock, myConfig().build()) //
+				.next(new TestCase() //
+						.input(ACTIVE_POWER_LIMIT_MODE, ActivePowerLimitMode.DISABLED) //
+						.output(ACTIVE_POWER_LIMIT_MODE, ActivePowerLimitMode.ACTUAL)) //
+				.next(new TestCase() //
+						.input(ACTIVE_POWER_LIMIT_MODE, ActivePowerLimitMode.PROPORTIONAL) //
+						.output(ACTIVE_POWER_LIMIT_MODE, ActivePowerLimitMode.ACTUAL)) //
+				.next(new TestCase() //
+						.input(ACTIVE_POWER_LIMIT_MODE, ActivePowerLimitMode.ACTUAL) //
+						.output(ACTIVE_POWER_LIMIT_MODE, ActivePowerLimitMode.ACTUAL)) //
+		;
+	}
+
 	@Test
 	public void testWatchdogDisabled() throws Exception {
 		final var clock = new TimeLeapClock(Instant.parse("2026-01-01T12:00:00.00Z"), ZoneOffset.UTC);

@@ -4,7 +4,7 @@ Integration with Eastron/Microcare SDM630 and SDM120 electricity meters via Modb
 
 == Overview
 
-This bundle provides integration with Eastron and Microcare energy meters, supporting both three-phase (SDM630, SDM72D-M-2) and single-phase (SDM120) installations. The components communicate with meters through the Modbus TCP protocol, enabling real-time energy monitoring and comprehensive data collection in OpenEMS.
+This bundle provides integration with Eastron and Microcare energy meters, supporting both three-phase (SDM630, SDM72D-M-2, SDM72D-M) and single-phase (SDM120) installations. The components communicate with meters through the Modbus TCP protocol, enabling real-time energy monitoring and comprehensive data collection in OpenEMS.
 
 Eastron meters are widely deployed in residential, commercial, and industrial installations. They support energy consumption, production, or grid measurement depending on configuration.
 
@@ -13,6 +13,7 @@ Eastron meters are widely deployed in residential, commercial, and industrial in
 * https://www.eastroneurope.com/[Eastron SDM 630 icon:external-link[]]
 * https://www.eastroneurope.com/[Eastron SDM 120 icon:external-link[]]
 * https://www.eastroneurope.com/[Microcare SDM72D-M-2 icon:external-link[]]
+* https://www.eastroneurope.com/[Eastron SDM72D-M (V1) icon:external-link[]]
 
 == Components
 
@@ -47,6 +48,36 @@ This bundle implements the following OpenEMS Components:
 * `phaseRotation` (Enum): Phase rotation - L1_L2_L3 or L1_L3_L2 (default: L1_L2_L3)
 
 [[_sdm630_meter]]
+
+=== <<_sdm72dm_meter,Eastron SDM72D-M (V1) Three-Phase Meter>>
+
+*Name*: Meter Eastron SDM72D-M
+
+*Factory-PID*: `Meter.Eastron.SDM72DM`
+
+.Implemented Natures/Interfaces
+* MeterEastronSdm72dm
+* ElectricityMeter
+* ModbusComponent
+* OpenemsComponent
+* ModbusSlave
+
+*Description*: Three-phase electricity meter via Modbus protocol for the first generation SDM72D-M.
+This model only provides total active power (register 30053) and total import/export energy (registers 30073/30075); there are no per-phase values.
+It also rejects requests for more than 30 parameters, so it cannot be used with the SDM630 / SDM72D-M-2 component.
+Import energy is mapped to `ActiveProductionEnergy` and export energy to `ActiveConsumptionEnergy` (swapped if `invert` is set).
+
+.*Configuration*:
+
+* `id` (String): Component ID for unique identification (default: "meter0")
+* `alias` (String): Human-readable alias for the component
+* `enabled` (Boolean): Enable/disable this component (default: true)
+* `modbus_id` (String): ID of Modbus bridge for communication (default: "modbus0")
+* `modbusUnitId` (Integer): Modbus Unit ID of the meter device (default: 1)
+* `type` (Enum): Meter type - GRID, PRODUCTION, or CONSUMPTION (default: GRID)
+* `invert` (Boolean): Invert power values and swap production/consumption energy (default: false)
+
+[[_sdm72dm_meter]]
 
 === <<_sdm120_meter,Eastron SDM120 Single-Phase Meter>>
 
